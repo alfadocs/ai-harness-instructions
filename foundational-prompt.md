@@ -19,56 +19,83 @@ Before writing any feature code, set up the full authentication and session flow
 Architecture rules (non-negotiable):
 - This is a Backend-for-Frontend (BFF) app. The React frontend never calls AlfaDocs APIs directly.
 - All AlfaDocs API calls go through Supabase Edge Functions.
-- The browser never holds an access token. Tokens live only in an httpOnly cookie set by Supabase.
+- The browser never holds an access token. Tokens live only in an httpOnly cookie set by the Edge Function.
+- There is NO frontend auth client. The Edge Function is the entire auth system.
 
 What to build first (in this order):
 
-1. A Supabase Edge Function at supabase/functions/alfadocs-auth/index.ts that handles:
-   - POST / → exchanges the OAuth2 code for tokens, sets an httpOnly session cookie
-   - GET /session → validates the cookie, returns { authenticated: boolean }, auto-refreshes if expired
-   - POST /logout → clears the cookie
-   Use the exact Edge Function template from the @alfadocs/oauth2-client README.
+1. A Supabase Edge Function at supabase/functions/alfadocs-auth/index.ts.
+   Use @alfadocs/oauth2-client. The library handles everything server-side:
+   login redirect, OAuth2 PKCE callback, session validation, token refresh, and logout.
 
-2. A React auth client at src/auth.ts using @alfadocs/oauth2-client:
-   npm install github:alfadocs/oauth2-client#v0.2.1
+   npm install github:alfadocs/oauth2-client
 
-   import { initAlfadocsAuth } from '@alfadocs/oauth2-client'
-   export const auth = initAlfadocsAuth({
-     clientId:    import.meta.env.VITE_ALFADOCS_CLIENT_ID,
-     redirectUri: `${window.location.origin}/callback`,
-     exchangeUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/alfadocs-auth`,
-     baseUrl:     'https://app.alfadocs.com',
+   import { createAlfadocsSupabaseAuth } from '@alfadocs/oauth2-client'
+
+   const auth = createAlfadocsSupabaseAuth({
+     clientId:         Deno.env.get("ALFADOCS_CLIENT_ID")!,
+     clientSecret:     Deno.env.get("ALFADOCS_CLIENT_SECRET")!,
+     redirectUri:      Deno.env.get("ALFADOCS_REDIRECT_URI")!,
+     appOrigin:        Deno.env.get("ALLOWED_ORIGIN")!,
+     baseUrl:          "https://app.alfadocs.com",
+     appPostLoginPath: "/dashboard",
    })
 
-3. A ProtectedRoute component at src/components/ProtectedRoute.tsx:
-   - Calls auth.refreshSession() on mount
-   - Shows a loading spinner while the session check is in flight
-   - Redirects to /login if refreshSession() returns false
-   - Only renders children after confirming session is valid
-   Never flash protected content before the session check completes.
+   Deno.serve((req) => auth.handleRequest(req))
 
-4. Three routes:
-   - /login → calls auth.login() on button click
-   - /callback → calls auth.handleCallback() on mount, shows loading spinner, then navigates to dashboard
+   The single handleRequest() method routes all auth traffic automatically:
+   - GET ?action=login   → starts login, redirects to AlfaDocs
+   - GET ?code=...       → handles OAuth2 callback, sets cookie, redirects to /dashboard
+   - GET (no params)     → returns { authenticated: boolean, user?: object }
+   - POST               → clears session cookie (logout)
+   - OPTIONS            → CORS preflight
+
+2. A ProtectedRoute component at src/components/ProtectedRoute.tsx.
+   It fetches the session from the Edge Function — no auth client needed on the frontend:
+
+   const SESSION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/alfadocs-auth`
+
+   export function ProtectedRoute({ children }) {
+     const [status, setStatus] = useState('loading')
+     useEffect(() => {
+       fetch(SESSION_URL, { credentials: 'include' })
+         .then(r => r.json())
+         .then(({ authenticated }) => setStatus(authenticated ? 'ok' : 'unauth'))
+         .catch(() => setStatus('unauth'))
+     }, [])
+     if (status === 'loading') return <div>Loading…</div>   // always show a spinner
+     if (status === 'unauth') return <Navigate to="/login" replace />
+     return children
+   }
+
+3. Two routes only (there is no /callback page — the Edge Function handles the callback):
+   - /login  → link or button pointing to:
+               `${VITE_SUPABASE_URL}/functions/v1/alfadocs-auth?action=login`
+               Do NOT use window.location.href from JS — use a plain <a> tag or redirect.
    - All other routes → wrapped in ProtectedRoute
 
-5. Supabase secrets (set via Lovable's Secrets panel, NOT with VITE_ prefix):
-   ALFADOCS_CLIENT_ID, ALFADOCS_CLIENT_SECRET, ALFADOCS_REDIRECT_URI,
-   ALFADOCS_BASE_URL=https://app.alfadocs.com, ALLOWED_ORIGIN
+4. Supabase secrets (set via Lovable's Secrets panel, NOT with VITE_ prefix):
+   ALFADOCS_CLIENT_ID
+   ALFADOCS_CLIENT_SECRET
+   ALFADOCS_REDIRECT_URI   → the Edge Function URL: https://<project>.supabase.co/functions/v1/alfadocs-auth
+   ALLOWED_ORIGIN          → https://yourapp.lovable.app
 
-6. Vite env vars (safe to expose, VITE_ prefix is OK):
-   VITE_ALFADOCS_CLIENT_ID, VITE_SUPABASE_URL
+5. Vite env vars (safe to expose, VITE_ prefix is OK):
+   VITE_SUPABASE_URL       → your Supabase project URL
 
 Hard rules:
 - Do not use supabase.auth for AlfaDocs login.
 - Do not store tokens in localStorage, sessionStorage, React state, or any browser-accessible location.
 - Do not call AlfaDocs APIs from the browser.
 - Always use credentials: "include" on every fetch to Supabase Edge Functions.
-- Never use Access-Control-Allow-Origin: * — always use the exact ALLOWED_ORIGIN env var.
-- Always validate Edge Function request bodies with Zod before using them.
-- Never expose error details (stack traces, error messages) in Edge Function responses.
+- Never use Access-Control-Allow-Origin: * — the library sets this from ALLOWED_ORIGIN automatically.
+- Never expose error details (stack traces, error messages) in any custom Edge Function responses.
+- package.json must have a "build" script. The CI pipeline runs npm run build and fails without it.
+- Never put any key other than SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY /
+  SUPABASE_PROJECT_ID (and their VITE_ equivalents) inside any .env file. Any other key in a .env
+  file will fail the CI pipeline's environment policy check.
 
-Once auth works end-to-end (login → callback → session check → logout), then build:
+Once auth works end-to-end (login → Edge Function callback → session check → logout), then build:
 [DESCRIBE YOUR APP FEATURES HERE]
 ```
 
@@ -93,25 +120,31 @@ Check 1 — Architecture:
 Check 2 — Authentication:
 - Are all protected pages and routes wrapped in ProtectedRoute (or equivalent)?
   → Every non-public route must check session before rendering content.
-- Is there a visible loading state while auth.refreshSession() is in flight?
-  → Never render protected content before the session check completes.
-- Does auth.refreshSession() failure redirect to /login?
-  → A false return must immediately redirect, not silently fail.
-- Is auth.handleCallback() called on the /callback page on mount?
-  → Without it the OAuth2 code is never exchanged and login breaks.
+- Does ProtectedRoute fetch the session from the Edge Function with credentials: "include"?
+  → It must call GET /functions/v1/alfadocs-auth and check { authenticated }.
+- Is there a visible loading state while the session check is in flight?
+  → Never render protected content before the check completes.
+- Does a false/unauthenticated response redirect immediately to /login?
+  → Must redirect, not silently fail.
+- Is there a /callback page in the React app?
+  → Remove it. The Edge Function handles the OAuth2 callback server-side.
+  → ALFADOCS_REDIRECT_URI must point to the Edge Function URL, not a frontend route.
+- Is the login action a link/redirect to the Edge Function with ?action=login?
+  → GET ${VITE_SUPABASE_URL}/functions/v1/alfadocs-auth?action=login
 
 Check 3 — Secrets and environment variables:
 - Are any secrets or credentials accidentally using the VITE_ prefix?
   → VITE_ bakes the value into the browser bundle. Move to Supabase secrets.
-- Are ALFADOCS_CLIENT_SECRET and any API keys set as Supabase secrets only?
-  → They must never appear in .env files committed to the repo.
+- Are any keys other than SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY /
+  SUPABASE_PROJECT_ID (and their VITE_ equivalents) inside any .env file?
+  → The CI pipeline will fail. Move those keys to Supabase secrets.
 - Does .gitignore include .env and .env.*?
   → Add it if missing.
 
 Check 4 — Session cookie:
-- Does the Supabase Edge Function set the cookie with all required attributes?
+- Does the Edge Function set the session cookie with all required attributes?
   HttpOnly, Secure, SameSite=None, Path=/, Max-Age set.
-  → Fix any missing attribute. SameSite=None requires Secure.
+  → The library handles this automatically. Only check if using a custom cookie setup.
 - Is SameSite=Lax or SameSite=Strict used anywhere?
   → Replace with SameSite=None; Secure.
 
@@ -121,7 +154,7 @@ Check 5 — CORS:
 - Is Access-Control-Allow-Credentials: "true" present on all Edge Function responses?
   → Required for cookies to be accepted by the browser.
 
-Check 6 — Edge Function security:
+Check 6 — Edge Function security (custom Edge Functions only, not alfadocs-auth):
 - Are all request bodies validated with Zod before use?
   → Add validation to any Edge Function that reads req.json().
 - Are AlfaDocs URLs built from user input or request headers?
@@ -142,6 +175,17 @@ Check 7 — React security:
   → Remove them all.
 - Are external links using target="_blank" without rel="noopener noreferrer"?
   → Add the rel attribute.
+
+Check 8 — CI pipeline compliance:
+- Does package.json have a "build" script?
+  → The pipeline runs npm run build and fails if it is missing or broken.
+- Is there a lockfile committed (package-lock.json, bun.lockb, yarn.lock, or pnpm-lock.yaml)?
+  → Required. The pipeline installs with --frozen-lockfile.
+- Does any .env file contain keys outside the Supabase allowlist?
+  → Only SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY / SUPABASE_PROJECT_ID
+     (and their VITE_ equivalents) are allowed in committed .env files.
+- Has any secret ever been committed to the git history, even in a later-removed commit?
+  → Gitleaks scans the full git history. A secret in any past commit will fail the pipeline.
 
 Fix everything found before continuing with new features.
 ```
@@ -166,31 +210,50 @@ Audit checklist — find and fix every instance of:
    Zustand, Redux, or any browser-accessible location
    → Tokens must only live in the httpOnly session cookie set by the Supabase Edge Function.
 
-3. Any VITE_ALFADOCS_CLIENT_SECRET or VITE_ prefix on any secret or credential
+3. Any VITE_ prefix on any secret or credential (including VITE_ALFADOCS_CLIENT_SECRET)
    → VITE_ means it's baked into the browser bundle. Move all secrets to Supabase secrets.
 
-4. Any supabase.auth usage for AlfaDocs login
-   → Replace entirely with @alfadocs/oauth2-client (npm install github:alfadocs/oauth2-client#v0.2.1).
+4. Any use of initAlfadocsAuth or the old frontend auth client from @alfadocs/oauth2-client
+   → Replace entirely with the server-side library on the Edge Function:
+     npm install github:alfadocs/oauth2-client
+     import { createAlfadocsSupabaseAuth } from '@alfadocs/oauth2-client'
+   → Delete any src/auth.ts frontend auth client file.
 
-5. Any session cookie with SameSite=Lax or SameSite=Strict
+5. Any supabase.auth usage for AlfaDocs login
+   → Remove. Use createAlfadocsSupabaseAuth in the Edge Function instead.
+
+6. Any /callback React page that calls auth.handleCallback()
+   → Remove the /callback page entirely. Set ALFADOCS_REDIRECT_URI to the Edge Function URL.
+     The library handles the callback server-side and redirects the browser to appPostLoginPath.
+
+7. Any session cookie with SameSite=Lax or SameSite=Strict
    → Must be SameSite=None; Secure (Lovable and Supabase are on different domains).
 
-6. Any CORS config using Access-Control-Allow-Origin: *
+8. Any CORS config using Access-Control-Allow-Origin: *
    → Must be the exact frontend URL from the ALLOWED_ORIGIN env var.
 
-7. Any fetch() to Supabase that is missing credentials: "include"
+9. Any fetch() to Supabase that is missing credentials: "include"
    → Add it. Without it, the session cookie is not sent and auth breaks.
 
-8. Any missing auth.refreshSession() call on app mount, or protected pages that render
-   content before the session check completes
-   → Add ProtectedRoute wrapper with a loading spinner.
+10. Any missing session check on protected pages, or protected content rendered before the
+    check completes
+    → Add a ProtectedRoute wrapper with a loading spinner. It must fetch:
+      GET ${VITE_SUPABASE_URL}/functions/v1/alfadocs-auth with credentials: "include"
+      and check { authenticated }.
 
-9. Any Edge Function that reads the Authorization header from the browser request and
-   forwards it to AlfaDocs
-   → Read the token from the session cookie server-side instead.
+11. Any Edge Function that reads the Authorization header from the browser request and
+    forwards it to AlfaDocs
+    → Read the token from the session cookie server-side instead.
 
-10. Any Edge Function request body used without Zod validation
+12. Any Edge Function request body used without Zod validation
     → Add validation before any business logic runs.
+
+13. Any .env file containing keys beyond the Supabase allowlist
+    → Remove them. Only SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY /
+      SUPABASE_PROJECT_ID (and their VITE_ equivalents) are allowed.
+
+14. Missing "build" script in package.json, or missing lockfile
+    → Add the script and commit the lockfile. The CI pipeline requires both.
 
 For each issue found, show me what you changed and why before moving on.
 Once the audit is clean, we can continue with new features.
@@ -200,7 +263,7 @@ Once the audit is clean, we can continue with new features.
 
 ## FOR LOVABLE: Must-Have Rules
 
-> These are the 15 non-negotiable rules for this project. They apply to every file, every edit, every feature. Memorize them. Never violate them.
+> These are the 16 non-negotiable rules for this project. They apply to every file, every edit, every feature. Memorize them. Never violate them.
 
 1. **Never call AlfaDocs APIs from React or the browser.** All AlfaDocs API calls go through Supabase Edge Functions. The browser only talks to Supabase.
 
@@ -208,19 +271,19 @@ Once the audit is clean, we can continue with new features.
 
 3. **Always use `credentials: "include"` on every fetch to Supabase.** Without it the session cookie is never sent and auth silently breaks.
 
-4. **Always call `auth.refreshSession()` before rendering protected content.** Use a `ProtectedRoute` wrapper that shows a loading spinner while the check is in flight and redirects to `/login` if it returns false.
+4. **Always check the session from the Edge Function before rendering protected content.** `ProtectedRoute` must `GET /functions/v1/alfadocs-auth` with `credentials: "include"` and read `{ authenticated }`. Show a loading spinner while in flight. Redirect to `/login` if false.
 
-5. **Never flash protected content before the session check completes.** Always show a loading state. Render nothing auth-sensitive until `refreshSession()` resolves.
+5. **Never flash protected content before the session check completes.** Always show a loading state. Render nothing auth-sensitive until the check resolves.
 
 6. **Never use the `VITE_` prefix on secrets.** `VITE_` variables are baked into the browser bundle at build time. Secrets belong in Supabase secrets only.
 
-7. **Session cookie must have all five attributes: `HttpOnly; Secure; SameSite=None; Path=/; Max-Age=604800`.** Missing any one of these breaks auth or security.
+7. **Session cookie must have all five attributes: `HttpOnly; Secure; SameSite=None; Path=/; Max-Age`.** The library sets these automatically. If you write a custom cookie, all five are required.
 
-8. **Never use `Access-Control-Allow-Origin: *`.** Always use the exact origin from the `ALLOWED_ORIGIN` env var. Wildcards disable cookie-based auth entirely.
+8. **Never use `Access-Control-Allow-Origin: *`.** Always use the exact origin from `ALLOWED_ORIGIN`. Wildcards disable cookie-based auth entirely.
 
 9. **Always include `Access-Control-Allow-Credentials: "true"` on every Edge Function response.** Required for the browser to accept the session cookie.
 
-10. **Validate every Edge Function request body with Zod before using it.** No exceptions. Parse first, then act.
+10. **Validate every custom Edge Function request body with Zod before using it.** No exceptions. Parse first, then act.
 
 11. **Never expose error details in Edge Function responses.** Return a generic message. Log the full error server-side only.
 
@@ -230,7 +293,9 @@ Once the audit is clean, we can continue with new features.
 
 14. **Add `X-Requested-With: XMLHttpRequest` to every non-GET fetch from the browser, and verify it in every corresponding Edge Function.** This is required CSRF protection for all mutations.
 
-15. **Use `@alfadocs/oauth2-client` with a pinned version tag. Never implement auth logic manually.** Install with `npm install github:alfadocs/oauth2-client#v0.2.1` and use only the five provided methods.
+15. **Use `@alfadocs/oauth2-client` and never implement auth logic manually.** Install with `npm install github:alfadocs/oauth2-client`. Use `createAlfadocsSupabaseAuth` in the Edge Function. There is no frontend auth client.
+
+16. **Never put non-Supabase keys in `.env` files, never commit secrets to git history, and always have a working `npm run build` script.** The CI pipeline enforces all three and will block deployment on any violation.
 
 ---
 
@@ -243,60 +308,70 @@ Once the audit is clean, we can continue with new features.
 ### Architecture
 
 ```
-Browser → Supabase Edge Function → AlfaDocs API
+Browser → Supabase Edge Function (alfadocs-auth) → AlfaDocs API
 ```
 
 - The React frontend never calls AlfaDocs APIs directly. Ever.
-- All AlfaDocs API calls happen inside Supabase Edge Functions (Deno runtime).
+- All AlfaDocs auth and API calls happen inside Supabase Edge Functions (Deno runtime).
 - The browser communicates only with Supabase Edge Functions, always with `credentials: "include"`.
+- There is no frontend auth client. The Edge Function is the entire auth system.
 - Do not use `supabase.auth` for AlfaDocs authentication — it is a different system.
 
 ---
 
 ### Authentication
 
-Install with a pinned version tag:
+Install the library in the Edge Function project:
 ```bash
-npm install github:alfadocs/oauth2-client#v0.2.1
+npm install github:alfadocs/oauth2-client
 ```
 
-Initialize once in `src/auth.ts`:
+Set up the Edge Function at `supabase/functions/alfadocs-auth/index.ts`:
 ```ts
-import { initAlfadocsAuth } from '@alfadocs/oauth2-client'
+import { createAlfadocsSupabaseAuth } from '@alfadocs/oauth2-client'
 
-export const auth = initAlfadocsAuth({
-  clientId:    import.meta.env.VITE_ALFADOCS_CLIENT_ID,
-  redirectUri: `${window.location.origin}/callback`,
-  exchangeUrl: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/alfadocs-auth`,
-  baseUrl:     'https://app.alfadocs.com',
+const auth = createAlfadocsSupabaseAuth({
+  clientId:         Deno.env.get("ALFADOCS_CLIENT_ID")!,
+  clientSecret:     Deno.env.get("ALFADOCS_CLIENT_SECRET")!,
+  redirectUri:      Deno.env.get("ALFADOCS_REDIRECT_URI")!,   // the Edge Function URL itself
+  appOrigin:        Deno.env.get("ALLOWED_ORIGIN")!,
+  baseUrl:          "https://app.alfadocs.com",
+  appPostLoginPath: "/dashboard",                              // where to send user after login
+  cookieMaxAgeSeconds: 604800,                                 // 7 days; match your token TTL
 })
+
+Deno.serve((req) => auth.handleRequest(req))
 ```
 
-Use exactly these 5 methods — never implement auth logic manually:
+The `handleRequest()` method routes all auth traffic via query params and HTTP method — no custom routing needed:
 
-| Method | Where | What it does |
+| Signal | Handler | What it does |
 |---|---|---|
-| `auth.login()` | Login button | Redirects to AlfaDocs login |
-| `auth.handleCallback()` | `/callback` page on mount | Exchanges code, sets cookie |
-| `auth.refreshSession()` | `ProtectedRoute` on mount | Returns `true` if session is valid |
-| `auth.isAuthenticated()` | Guards, conditional renders | Sync boolean, in-memory only |
-| `auth.logout()` | Logout button | Clears cookie via Supabase |
+| `OPTIONS *` | `handleOptions` | CORS preflight → 204 |
+| `GET ?action=login` | `handleLogin` | Generates PKCE pair + state, redirects to AlfaDocs |
+| `GET ?code=...` | `handleCallback` | Exchanges code, stores session cookie, redirects to app |
+| `GET` (no params) | `handleSession` | Returns `{ authenticated, user? }`, auto-refreshes token |
+| `POST` | `handleLogout` | Clears session cookie → `{ ok: true }` |
+
+`ALFADOCS_REDIRECT_URI` must be set to the Edge Function URL itself (e.g., `https://<project>.supabase.co/functions/v1/alfadocs-auth`), not a frontend route. The library redirects the browser back to `appOrigin + appPostLoginPath` after a successful callback.
 
 #### Protected Route
 
-Wrap every non-public route in a `ProtectedRoute` component. Never skip it:
+There is no `/callback` page. Wrap every non-public route in `ProtectedRoute`:
 ```tsx
 // src/components/ProtectedRoute.tsx
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { auth } from '@/auth'
+
+const SESSION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/alfadocs-auth`
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<'loading' | 'ok' | 'unauth'>('loading')
 
   useEffect(() => {
-    auth.refreshSession()
-      .then(ok => setStatus(ok ? 'ok' : 'unauth'))
+    fetch(SESSION_URL, { credentials: 'include' })
+      .then(r => r.json())
+      .then(({ authenticated }) => setStatus(authenticated ? 'ok' : 'unauth'))
       .catch(() => setStatus('unauth'))
   }, [])
 
@@ -311,20 +386,27 @@ Use it in your router:
 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 ```
 
-#### Callback Page
+#### Login and Logout
 
-The `/callback` page must show a spinner while the exchange is in flight:
 ```tsx
-useEffect(() => {
-  auth.handleCallback()
-    .then(() => navigate('/dashboard'))
-    .catch(() => navigate('/login'))
-}, [])
+// SESSION_URL is already defined in ProtectedRoute.tsx — reuse it
+// Login — plain link, no JS auth logic needed
+function LoginButton() {
+  return <a href={`${SESSION_URL}?action=login`}>Sign in with AlfaDocs</a>
+}
 
-return <div>Completing login…</div>
+// Logout — POST to the Edge Function, then redirect
+async function logout(navigate: (path: string) => void) {
+  await fetch(SESSION_URL, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  })
+  navigate('/login')
+}
 ```
 
-Never render any app content on the callback page. Never navigate before `handleCallback()` resolves.
+Never implement PKCE, token exchange, state verification, or cookie logic manually. The library handles all of it.
 
 ---
 
@@ -332,13 +414,32 @@ Never render any app content on the callback page. Never navigate before `handle
 
 `VITE_` prefix = baked into the browser bundle at build time = visible to anyone in DevTools.
 
-| Variable | VITE_ prefix? | Why |
-|---|---|---|
-| `VITE_ALFADOCS_CLIENT_ID` | ✅ OK | Appears in the OAuth2 authorize URL anyway |
-| `VITE_SUPABASE_URL` | ✅ OK | Public Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | ✅ OK | Publishable anon key — safe to expose, but scope with RLS |
-| `ALFADOCS_CLIENT_SECRET` | ❌ Never | Supabase secrets only |
-| Any token, API key, or credential | ❌ Never | Supabase secrets only |
+| Variable | Where | VITE_ prefix? | Why |
+|---|---|---|---|
+| `VITE_SUPABASE_URL` | Frontend | ✅ OK | Public Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Frontend | ✅ OK | Publishable anon key — scope with RLS |
+| `ALFADOCS_CLIENT_ID` | Edge Function | ❌ Never in VITE_ | Supabase secrets only |
+| `ALFADOCS_CLIENT_SECRET` | Edge Function | ❌ Never | Supabase secrets only |
+| `ALFADOCS_REDIRECT_URI` | Edge Function | ❌ Never | Supabase secrets only |
+| `ALLOWED_ORIGIN` | Edge Function | ❌ Never | Supabase secrets only |
+| Any token, API key, or credential | — | ❌ Never | Supabase secrets only |
+
+#### .env File Allowlist (CI Pipeline-Enforced)
+
+The pipeline validates every `.env`, `.env.local`, `.env.development`, `.env.production`, `.env.test`, and `.env.staging` file. **Only these 8 keys are permitted:**
+
+```
+SUPABASE_URL
+SUPABASE_PUBLISHABLE_KEY
+SUPABASE_PROJECT_ID
+SUPABASE_ANON_KEY
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+VITE_SUPABASE_PROJECT_ID
+VITE_SUPABASE_ANON_KEY
+```
+
+Any other key in a committed `.env` file causes an immediate pipeline failure. All other configuration goes in Supabase secrets. `.env.example` is not validated and may document any keys as placeholders.
 
 Always provide `.env.example` with placeholder values. Never commit `.env`. Always include `.env*` in `.gitignore`.
 
@@ -346,21 +447,24 @@ Always provide `.env.example` with placeholder values. Never commit `.env`. Alwa
 
 ### Session Cookie
 
-The Supabase Edge Function must set the cookie with **all** of these attributes:
+The library sets the session cookie automatically with the correct attributes:
 ```
 HttpOnly        — JS cannot read it
 Secure          — HTTPS only
 SameSite=None   — required: Lovable (lovable.app) and Supabase (supabase.co) are different origins
 Path=/
-Max-Age=604800  — 7 days; adjust to match your token TTL
+Max-Age         — configured via cookieMaxAgeSeconds (default 7 days)
 ```
 
+If you write any custom cookie in your own Edge Functions, apply all the same attributes.
 Never use `SameSite=Lax` or `SameSite=Strict` — they silently break cross-origin cookie sending.
 `SameSite=None` requires `Secure` — browsers reject `SameSite=None` cookies without it.
 
 ---
 
 ### CORS
+
+The `alfadocs-auth` Edge Function handles CORS automatically via the library. For any **custom** Edge Functions you add:
 
 ```ts
 const corsHeaders = {
@@ -369,9 +473,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods":     "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":     "Content-Type, X-Requested-With",
 }
+
+// Always handle preflight
+if (req.method === "OPTIONS") {
+  return new Response(null, { status: 204, headers: corsHeaders })
+}
 ```
 
-Always handle `OPTIONS` preflight requests and return `corsHeaders` with a `204` response.
 Never use `Access-Control-Allow-Origin: *` — it disables cookie-based auth entirely.
 `Access-Control-Allow-Credentials: true` requires a specific non-wildcard origin.
 
@@ -385,14 +493,14 @@ Never use `Access-Control-Allow-Origin: *` — it disables cookie-based auth ent
 | `sessionStorage` | ❌ Never | ❌ Never |
 | React state / Context / Zustand | ❌ Never | ✅ Boolean flag only (e.g. `isReady`) |
 | `window.*` or globals | ❌ Never | ❌ Never |
-| httpOnly cookie via Supabase | ✅ Only here | — |
+| httpOnly cookie via Edge Function | ✅ Only here | — |
 
 ---
 
 ### API Proxy Pattern
 
-Every Supabase Edge Function that calls AlfaDocs must:
-1. Read the token from the session cookie — never from a request header
+Every custom Supabase Edge Function that calls AlfaDocs must:
+1. Read the session cookie and extract the access token — never from a request header
 2. Return `401` immediately if no valid token is found
 3. Add `Authorization: Bearer {token}` server-side
 4. Never forward any `Authorization` header from the browser
@@ -458,7 +566,7 @@ import { z } from 'https://deno.land/x/zod/mod.ts'
 Never expose internal details to the browser:
 ```ts
 // ✅ Correct
-console.error("AlfaDocs token exchange failed:", e)          // server-side log
+console.error("AlfaDocs API call failed:", e)          // server-side log
 return new Response(JSON.stringify({ error: "Request failed" }), { status: 500, headers: corsHeaders })
 
 // ❌ Wrong
@@ -471,9 +579,9 @@ Never proxy AlfaDocs error responses verbatim to the browser — always map to a
 
 ### CSRF Protection
 
-The OAuth2 `state` parameter (handled automatically by the library) protects the auth flow.
+The OAuth2 `state` parameter and PKCE (handled automatically by the library) protect the auth flow.
 
-For **all** POST/PATCH/DELETE calls through Supabase, send `X-Requested-With` and verify it — this is required, not optional:
+For **all** POST/PATCH/DELETE calls from the browser to Supabase, send `X-Requested-With` and verify it — this is required, not optional:
 ```ts
 // Browser — every mutating fetch
 fetch(url, {
@@ -498,12 +606,13 @@ if (req.method !== "GET" && req.method !== "OPTIONS") {
 
 ### Security Headers
 
-Include on **all** Edge Function responses:
+Include on **all** custom Edge Function responses:
 ```ts
 const securityHeaders = {
   "X-Content-Type-Options":  "nosniff",
   "X-Frame-Options":         "DENY",
   "Referrer-Policy":         "strict-origin-when-cross-origin",
+  "Permissions-Policy":      "camera=(), microphone=(), geolocation=()",
 }
 ```
 
@@ -522,9 +631,9 @@ In `index.html`:
 
 ### Redirect URI Security
 
-- `redirectUri` must always be `${window.location.origin}/callback` — never from a URL parameter or user input
-- After login or logout, only redirect to known internal routes — never to external URLs
-- The Edge Function must verify `redirect_uri` matches `ALFADOCS_REDIRECT_URI` from env exactly
+- `ALFADOCS_REDIRECT_URI` must be the Edge Function URL — never a frontend route or URL parameter
+- After login, the Edge Function redirects to `appOrigin + appPostLoginPath` — never to user-supplied URLs
+- After logout, only redirect to known internal routes — never to external URLs
 
 ---
 
@@ -536,6 +645,26 @@ In `index.html`:
 - Always add `rel="noopener noreferrer"` to `<a target="_blank">` links
 - Never `console.log` tokens, cookies, session objects, or anything from the auth flow
 - Treat AlfaDocs API responses as untrusted — validate shape before rendering
+
+---
+
+### Pipeline Guardrails (Automated — Applied to Every Push)
+
+The CI/CD pipeline runs six automated checks on every push to `main`/`master`. A failure on any check blocks deployment and triggers an auto-fix PR. Write code that passes all six from the start:
+
+**1. ESLint + eslint-plugin-security** — Fails on: `eval()` with dynamic expressions, non-literal regular expressions, non-literal `require()`, child_process with variable arguments, Unicode bidi characters (Trojan source), disabled Mustache escaping. All security rules are treated as errors, not warnings.
+
+**2. Semgrep (OWASP Top 10)** — Semantic security analysis covering injection, broken auth, sensitive data exposure, XSS, insecure deserialization, and more. JavaScript, TypeScript, and Node.js rulesets all run.
+
+**3. Gitleaks (full git history scan)** — Scans every commit ever made, not just the latest. A secret committed and later removed in a subsequent commit is still in the history and will still fail. There is no recovery from this without a force-push history rewrite. **Never commit a secret, even temporarily.**
+
+**4. npm audit** — Scans for high-severity dependency vulnerabilities. If found and no Dependabot config exists, the pipeline creates one and marks the build failed to trigger a fix. Keep dependencies updated.
+
+**5. .env file allowlist** — Only the 8 Supabase keys listed in the Environment Variables section are permitted in committed `.env*` files. Any other key causes immediate failure.
+
+**6. Build verification** — `npm run build` must exist in `package.json` and must succeed. The build runs with a frozen lockfile — commit your lockfile and do not modify `package.json` in ways that invalidate it.
+
+Branch convention: guardrails run on `main`/`master` pushes. Only the `stable` branch is deployed. Promotion to stable happens automatically when guardrails pass.
 
 ---
 
@@ -554,10 +683,16 @@ In `index.html`:
 | URL built from user input in Edge Function | SSRF |
 | Forwarding browser `Authorization` header to AlfaDocs | Token injection |
 | `supabase.auth.*` for AlfaDocs login | Wrong auth system |
-| Rendering protected content before `refreshSession()` resolves | Auth bypass / flicker |
+| `initAlfadocsAuth(...)` or any frontend auth client | Wrong API — use `createAlfadocsSupabaseAuth` in the Edge Function |
+| A `/callback` React page that handles the OAuth2 exchange | Edge Function handles it server-side |
+| Rendering protected content before session check resolves | Auth bypass / content flicker |
 | Unversioned Deno imports (`deno.land/x/zod/mod.ts`) | Supply chain risk |
 | Missing `credentials: "include"` on fetch to Supabase | Cookie not sent, auth silently breaks |
 | Missing `X-Requested-With` on mutating fetches | CSRF vulnerability |
 | `SameSite=None` without `Secure` | Browser rejects the cookie |
 | Missing `Access-Control-Allow-Credentials: "true"` | Browser rejects the cookie |
 | Auth redirect target from URL param or user input | Open redirect vulnerability |
+| Any non-Supabase key in a committed `.env` file | CI pipeline env policy failure |
+| Missing `npm run build` script in package.json | CI pipeline build check failure |
+| Committing any secret to git history, even temporarily | Gitleaks scans full history — irrecoverable |
+| Modifying package.json without updating the lockfile | CI pipeline uses --frozen-lockfile |
