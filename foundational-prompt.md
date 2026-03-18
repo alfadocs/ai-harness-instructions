@@ -26,9 +26,10 @@ What to build first (in this order):
 
 1. Supabase Edge Function at supabase/functions/alfadocs-auth/index.ts:
 
-   npm install github:alfadocs/oauth2-client
+   `alfadocs/oauth2-client` is a public GitHub repo (not published on npm). Deno Edge can’t use `github:` specifiers directly, so import it via `esm.sh` from the `main` branch:
+   `import { createAlfadocsSupabaseAuth } from "https://esm.sh/gh/alfadocs/oauth2-client@main?target=deno&bundle"`
 
-   import { createAlfadocsSupabaseAuth } from '@alfadocs/oauth2-client'
+   Example usage:
    const auth = createAlfadocsSupabaseAuth({
      clientId:         Deno.env.get("ALFADOCS_CLIENT_ID")!,
      clientSecret:     Deno.env.get("ALFADOCS_CLIENT_SECRET")!,
@@ -155,7 +156,7 @@ Audit and fix this project to follow the Alfadocs security architecture. For eac
 1. Any fetch() to app.alfadocs.com from React → move to Supabase Edge Function.
 2. Tokens in localStorage / sessionStorage / React state / Zustand / Redux → remove. Tokens live only in the httpOnly session cookie.
 3. VITE_ prefix on any secret → move to Supabase secrets.
-4. initAlfadocsAuth or any frontend auth client → delete src/auth.ts. Replace with createAlfadocsSupabaseAuth in the Edge Function (npm install github:alfadocs/oauth2-client).
+4. initAlfadocsAuth or any frontend auth client → delete src/auth.ts. Replace with createAlfadocsSupabaseAuth in the Edge Function (import via `https://esm.sh/gh/alfadocs/oauth2-client@main?target=deno&bundle`).
 5. supabase.auth for AlfaDocs login → remove entirely.
 6. /callback React page → delete it. Set ALFADOCS_REDIRECT_URI to the Edge Function URL. The library handles the callback server-side.
 7. SameSite=Lax or SameSite=Strict on session cookie → replace with SameSite=None; Secure.
@@ -190,7 +191,7 @@ Once the audit is clean, we can continue with new features.
 12. **Never build AlfaDocs URLs from user input or request headers.** Use `Deno.env.get("ALFADOCS_BASE_URL")` + hardcoded path templates only.
 13. **Read tokens from the session cookie server-side. Never forward the browser's `Authorization` header to AlfaDocs.**
 14. **Add `X-Requested-With: XMLHttpRequest` to every non-GET fetch from the browser, and verify it in the Edge Function.** Required CSRF protection for all mutations.
-15. **Use `@alfadocs/oauth2-client` and never implement auth logic manually.** `createAlfadocsSupabaseAuth` in the Edge Function. There is no frontend auth client.
+15. **Use the official AlfaDocs OAuth client and never implement auth logic manually.** In the Edge Function use `createAlfadocsSupabaseAuth` imported via `https://esm.sh/gh/alfadocs/oauth2-client@main?target=deno&bundle` (GitHub-only). There is no frontend auth client.
 16. **Never put non-Supabase keys in `.env` files, never commit secrets to git history, always have `npm run build`.** The CI pipeline enforces all three and blocks deployment on any violation.
 
 ---
@@ -203,14 +204,16 @@ Once the audit is clean, we can continue with new features.
 
 ### Authentication
 
-Install in the Edge Function project:
+Import in the Edge Function (GitHub-only; use `main`):
 ```bash
-npm install github:alfadocs/oauth2-client
+# No `npm install` step inside the Edge Function.
+# Import from GitHub via esm.sh from `main`.
 ```
 
 `supabase/functions/alfadocs-auth/index.ts`:
 ```ts
-import { createAlfadocsSupabaseAuth } from '@alfadocs/oauth2-client'
+// Import from GitHub via esm.sh (`main`):
+// import { createAlfadocsSupabaseAuth } from "https://esm.sh/gh/alfadocs/oauth2-client@main?target=deno&bundle"
 
 const auth = createAlfadocsSupabaseAuth({
   clientId:            Deno.env.get("ALFADOCS_CLIENT_ID")!,
