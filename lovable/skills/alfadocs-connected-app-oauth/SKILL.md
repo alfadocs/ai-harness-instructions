@@ -58,7 +58,8 @@ const auth = createAlfadocsAuth({
 Deno.serve((req) => {
   const u = new URL(req.url);
   const inner = u.pathname.replace(/^\/functions\/v1\/alfadocs-auth/, "") || "/";
-  return auth.handleRequest(new Request(inner + u.search, req));
+  // new Request() requires an absolute URL — reconstruct from base, not bare path
+  return auth.handleRequest(new Request(new URL(inner + u.search, req.url).href, req));
 });
 ```
 

@@ -122,7 +122,7 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
    Deno.serve((req) => {
      const u = new URL(req.url);
      const inner = u.pathname.replace(/^\/functions\/v1\/alfadocs-auth/, "") || "/";
-     return auth.handleRequest(new Request(inner + u.search, req));
+     return auth.handleRequest(new Request(new URL(inner + u.search, req.url).href, req));
    });
 
 2. supabase/config.toml: verify_jwt = false for alfadocs-auth AND alfadocs-api.
