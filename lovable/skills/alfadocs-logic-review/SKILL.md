@@ -60,7 +60,7 @@ The companion checklist with the exact failure modes and how to spot them in cod
 - [ ] **Pagination** is followed where the endpoint paginates — the app doesn't silently process only page 1. (**blocker** if "total" logic or list display assumes one page.)
 - [ ] **Empty** results are handled (no patients, no appointments) without crashing or showing a broken state.
 - [ ] **Error / non-2xx** responses from AlfaDocs are checked before parsing `.json()` and surfaced sensibly — not assumed to be success. (**blocker** if `res.json()` is parsed without a status check and an error body is treated as data.)
-- [ ] Endpoint paths/methods/body shapes were verified against `https://app.alfadocs.com/api.html`, not guessed.
+- [ ] Endpoint paths/methods **and response field names + envelope** were verified against `https://app.alfadocs.com/api.html`, not guessed — no aliased/fallback field chains (`a.startsAt ?? a.starts_at`), no embedded object assumed where the API returns an id. (**blocker** if mismapped fields render blank/empty data.)
 
 ## 7. Idempotency — repeated events & retries
 

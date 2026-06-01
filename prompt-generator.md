@@ -94,6 +94,11 @@ The prompt has four sections — adapt the content but keep the structure:
 - ALL AlfaDocs calls go through Supabase Edge Functions.
 - Browser NEVER holds a token. Tokens in httpOnly cookie + server-side session storage only.
 - No frontend auth client. No localStorage/sessionStorage for auth. No VITE_ vars for secrets.
+- DATA SHAPE: confirm every AlfaDocs endpoint in the API docs (https://app.alfadocs.com/api.html)
+  BEFORE mapping it — exact path, query params, request body, and the real response field
+  names + envelope ({data} vs {results} vs bare array). NEVER guess field names or stack
+  `a.x ?? a.X ?? a.y` fallbacks; map against one real response's actual keys. (e.g. an
+  appointment exposes `date`/`duration`/`patientId`/`description`, not `startsAt`/`patient`.)
 ```
 
 ### AUTH — OAuth path
@@ -127,19 +132,23 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
        oauthClientId: Deno.env.get("ALFADOCS_CLIENT_ID")!,
      }),
-     resolveProfile: async ({ accessToken, meUrl, fetchImpl }) => {
+     resolveProfile: async ({ accessToken, tokenResponse, meUrl, fetchImpl }) => {
+       // accessToken is a STRING. The refresh token + expiry live on tokenResponse —
+       // accessToken.access_token / .refresh_token / .expires_in do NOT exist.
        const me = await fetchImpl(meUrl, {
-         headers: { Authorization: `Bearer ${accessToken.access_token}`, Accept: "application/json" },
+         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
        }).then(r => r.json());
-       // Guard: String(undefined) stores "undefined" causing all token lookups to fail
-       const practiceId = me.practiceId ?? me.practice_id;
-       const archiveId  = me.archiveId  ?? me.archive_id;
+       // /me wraps the profile under `.data`. String(undefined) stores "undefined",
+       // which makes every later token lookup miss — unwrap and guard both.
+       const profile = me?.data && typeof me.data === "object" ? me.data : me;
+       const practiceId = profile.practiceId ?? profile.practice_id;
+       const archiveId  = profile.archiveId  ?? profile.archive_id;
        if (!practiceId || !archiveId)
          throw new Error(`/me missing practiceId/archiveId: ${JSON.stringify(me)}`);
        await supabaseAdmin.from("oauth_tokens").upsert({
          practice_id: String(practiceId), archive_id: String(archiveId),
-         access_token: accessToken.access_token, refresh_token: accessToken.refresh_token,
-         expires_at: new Date(Date.now() + (accessToken.expires_in ?? 3600) * 1000).toISOString(),
+         access_token: accessToken, refresh_token: tokenResponse.refresh_token,
+         expires_at: new Date(Date.now() + (tokenResponse.expires_in ?? 3600) * 1000).toISOString(),
          status: "active",
        }, { onConflict: "practice_id,archive_id" });
        return { practiceId, archiveId };
@@ -287,6 +296,9 @@ HARD RULES:
 | Patient list | `patient:list` |
 
 Default to the minimum scopes the feature requires. Justify each one in a comment.
+A read-only app requests only `:list`/`:view` scopes — never write/billing/webhook scopes.
+Full endpoint + scope reference: https://app.alfadocs.com/api.html — check it for the exact
+path, params, and response shape of anything not listed above.
 
 ---
 
@@ -320,7 +332,10 @@ Before writing any feature code, set up the full authentication and session flow
 [Builder's feature description, re-stated clearly and precisely.
  Include: what data it reads/writes, who uses it, what the UI looks like,
  key states (loading/empty/error), any polling/refresh behaviour,
- accessibility requirements (e.g. TV display → large type, prefers-reduced-motion).]
+ accessibility requirements (e.g. TV display → large type, prefers-reduced-motion).
+ For each AlfaDocs endpoint the feature touches, confirm the exact response field
+ names + envelope against https://app.alfadocs.com/api.html and map against those real
+ keys — do not invent or guess field names.]
 
 === UI — AlfaDocs design system ===
 [verbatim from above, with component imports tailored to what the feature needs]

@@ -40,8 +40,10 @@ Implement the strictest possible Content Security Policy.
 
 ## 6. External API Calls
 
+- **Confirm the contract before you map it.** Read the API's published docs (AlfaDocs: <https://app.alfadocs.com/api.html>) for the exact path, query params, request body, response **envelope** (`{data}` vs `{results}` vs bare array) and **field names** — then fetch one real response and map against its actual keys. Guessing — `a.startsAt ?? a.starts_at ?? a.start`, or assuming an embedded object where the API returns an id — is a defect, not defensiveness.
+- Treat a library's documented return type as the contract. A value may be a **string** where you assumed an object (e.g. an auth callback's `accessToken`); a wrong assumption here fails *silently* and stores `undefined`.
 - Centralize headers, base URLs, retry policy, and auth in one client per integration. Never inline `fetch` with hand-rolled headers in components or hooks.
-- Refresh and use auth tokens within a single request scope to avoid race conditions across concurrent contexts.
+- Refresh and use auth tokens within a single request scope to avoid race conditions across concurrent contexts. With refresh-token **rotation**, serialize refreshes behind a real lock (single-flight / conditional update) — parallel refreshes send each other's rotated-away token and can revoke the whole session. A lock *column that nothing reads* is not a lock.
 - Set explicit timeouts on every outbound call.
 
 ## 7. Webhooks (general)
@@ -82,7 +84,7 @@ Specializes §4, §6, §7 for the AlfaDocs case.
 
 **Tenant scope** — `practiceId` and `archiveId` together define the tenant. Apply §4 with both columns: every query scoped, RLS on both, edge functions authorize the caller's `practiceId`/`archiveId` against their JWT before any work.
 
-**API requests** — auth is **one scheme per request, never both**: **OAuth** sends `Authorization: Bearer <token>`; **API-key** sends `X-Api-Key: <key>`; both also send `Accept: application/json`. Base URL `https://app.alfadocs.com/api/v1`; call `/me` first for `practiceId` + `archiveId`. Secrets (API key / OAuth Client Secret) live in **Supabase Edge Function secrets** — never in the frontend or git.
+**API requests** — auth is **one scheme per request, never both**: **OAuth** sends `Authorization: Bearer <token>`; **API-key** sends `X-Api-Key: <key>`; both also send `Accept: application/json`. Base URL `https://app.alfadocs.com/api/v1`. **Full endpoint + response reference: <https://app.alfadocs.com/api.html> — confirm field names, query params, and the response envelope there before mapping any endpoint; do not guess.** Call `/me` first for `practiceId` + `archiveId` (the profile is nested under `.data`). Secrets (API key / OAuth Client Secret) live in **Supabase Edge Function secrets** — never in the frontend or git.
 
 **Token expiry** — OAuth tokens expire (~1h). Store `expires_at` as an absolute timestamp; check before every API call and refresh if expired (→ `oauth-token-refresh` skill). Never skip this in polling/long-running apps.
 
@@ -114,7 +116,7 @@ Build **all** UI with **`@alfadocs/ui-kit`** (public npm; React 18 & 19). Never 
 - `new Service()` inside a component or hook body
 - Component > 150 lines or > 5 local state slots
 - `useEffect(..., [])` calling closures whose identity isn't stable
-- Field-name fallback chains
+- Field-name fallback chains, or mapping an endpoint whose real shape you haven't confirmed in `https://app.alfadocs.com/api.html` (guessing field names / response envelope)
 - Two JSX blocks differing only in props
 - Handlers reading tenant IDs (`practiceId`/`archiveId`) from input without authorizing them
 - Returning 202 (or any non-200) to AlfaDocs webhooks

@@ -67,6 +67,7 @@ Companion to `SKILL.md`. Each row is a concrete defect, where it hides in the co
 | Empty handled | Map/iterate over results with no empty guard → crash or blank-broken UI | warning |
 | Errors checked | `await res.json()` with no `res.ok` / status check first | blocker |
 | Endpoints verified | Paths that don't match `app.alfadocs.com/api.html` | warning |
+| Fields mapped from real keys | Response read via guessed/aliased keys (`a.startsAt ?? a.starts_at ?? a.start`), an embedded object assumed where the API returns an id (`a.patient.firstName` when the appointment carries `patientId`), or the wrong envelope (`data` vs `results` vs bare array) — confirm field names + envelope against `app.alfadocs.com/api.html` and map a real response | blocker if data renders blank |
 
 ## Idempotency
 

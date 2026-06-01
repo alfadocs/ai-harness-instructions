@@ -50,20 +50,23 @@ const auth = createAlfadocsAuth({
     serviceRoleKey: Deno.env.get("AUTH_SUPABASE_KEY")!,    // SERVICE ROLE — never the anon key, never the browser
     oauthClientId:  Deno.env.get("ALFADOCS_CLIENT_ID")!,   // scopes the multi-tenant app_id on every row
   }),
-  resolveProfile: async ({ accessToken, meUrl, fetchImpl }) => {
+  resolveProfile: async ({ accessToken, tokenResponse, meUrl, fetchImpl }) => {
+    // accessToken is a STRING. refresh token + expiry are on tokenResponse —
+    // accessToken.access_token / .refresh_token / .expires_in do NOT exist.
     const me = await fetchImpl(meUrl, {
-      headers: { Authorization: `Bearer ${accessToken.access_token}`, Accept: "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     }).then(r => r.json());
-    // Guard: String(undefined) stores the literal "undefined" as practice_id,
-    // causing every subsequent token lookup to silently return null.
-    const practiceId = me.practiceId ?? me.practice_id;
-    const archiveId  = me.archiveId  ?? me.archive_id;
+    // /me wraps the profile under `.data`. And String(undefined) stores the literal
+    // "undefined" as practice_id, making every later token lookup silently miss.
+    const profile = me?.data && typeof me.data === "object" ? me.data : me;
+    const practiceId = profile.practiceId ?? profile.practice_id;
+    const archiveId  = profile.archiveId  ?? profile.archive_id;
     if (!practiceId || !archiveId)
       throw new Error(`/me missing practiceId/archiveId: ${JSON.stringify(me)}`);
     await supabaseAdmin.from("oauth_tokens").upsert({
       practice_id: String(practiceId), archive_id: String(archiveId),
-      access_token: accessToken.access_token, refresh_token: accessToken.refresh_token,
-      expires_at: new Date(Date.now() + (accessToken.expires_in ?? 3600) * 1000).toISOString(),
+      access_token: accessToken, refresh_token: tokenResponse.refresh_token,
+      expires_at: new Date(Date.now() + (tokenResponse.expires_in ?? 3600) * 1000).toISOString(),
       status: "active",
     }, { onConflict: "practice_id,archive_id" });
     return { practiceId, archiveId };
