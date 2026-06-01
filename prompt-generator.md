@@ -135,8 +135,14 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
 
 5. Two routes only: "/" (protected) + "/login". NO /callback in React.
 
-6. Secrets (Supabase Edge Function secrets — NEVER .env or VITE_):
-   ALFADOCS_CLIENT_ID, ALFADOCS_CLIENT_SECRET, APP_ORIGIN
+6. Secrets — DO NOT prompt for these during the build. Scaffold everything
+   reading from Deno.env.get(...) and leave the values empty. I will add them
+   in Supabase Edge Function settings AFTER the first deploy, in this order:
+     a) Deploy → note the Supabase function URL
+     b) Register the OAuth client at app.alfadocs.com/admin/marketplace-apps
+        using that exact callback URL → receive ALFADOCS_CLIENT_ID + SECRET
+     c) Add to Supabase Edge Function secrets:
+        ALFADOCS_CLIENT_ID, ALFADOCS_CLIENT_SECRET, APP_ORIGIN
 
 7. alfadocs-api Edge Function:
    - CORS: reject non-matching origins with 403 (not just omit header):
@@ -165,6 +171,7 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
      (API-key apps use X-Api-Key ONLY — no Authorization: Bearer).
    - GET /me first to obtain practiceId + archiveId; scope every subsequent call to both.
 3. Secret: ALFADOCS_API_KEY in Supabase Edge Function secrets — never .env or VITE_.
+   DO NOT prompt for this during the build. I will add it after the first deploy.
 ```
 
 ### UI (always include — adapt the import list to the app's actual components)
