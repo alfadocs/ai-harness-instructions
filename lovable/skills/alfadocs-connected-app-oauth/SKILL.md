@@ -50,7 +50,24 @@ const auth = createAlfadocsAuth({
     serviceRoleKey: Deno.env.get("AUTH_SUPABASE_KEY")!,    // SERVICE ROLE — never the anon key, never the browser
     oauthClientId:  Deno.env.get("ALFADOCS_CLIENT_ID")!,   // scopes the multi-tenant app_id on every row
   }),
-  // resolveProfile: read /me here and vault the access token so custom Edge Functions (Step 7) can reuse it
+  resolveProfile: async ({ accessToken, meUrl, fetchImpl }) => {
+    const me = await fetchImpl(meUrl, {
+      headers: { Authorization: `Bearer ${accessToken.access_token}`, Accept: "application/json" },
+    }).then(r => r.json());
+    // Guard: String(undefined) stores the literal "undefined" as practice_id,
+    // causing every subsequent token lookup to silently return null.
+    const practiceId = me.practiceId ?? me.practice_id;
+    const archiveId  = me.archiveId  ?? me.archive_id;
+    if (!practiceId || !archiveId)
+      throw new Error(`/me missing practiceId/archiveId: ${JSON.stringify(me)}`);
+    await supabaseAdmin.from("oauth_tokens").upsert({
+      practice_id: String(practiceId), archive_id: String(archiveId),
+      access_token: accessToken.access_token, refresh_token: accessToken.refresh_token,
+      expires_at: new Date(Date.now() + (accessToken.expires_in ?? 3600) * 1000).toISOString(),
+      status: "active",
+    }, { onConflict: "practice_id,archive_id" });
+    return { practiceId, archiveId };
+  },
 });
 
 // Supabase serves this at /functions/v1/alfadocs-auth/<path>, but handleRequest expects
@@ -166,6 +183,12 @@ await fetch(
 To proxy any AlfaDocs call, write another Edge Function that:
 
 1. Reads the session cookie and looks up the access token server-side.
+   **If the session is expired or missing, return a 401 immediately** — the frontend
+   must handle this by redirecting to `/login`, not showing a generic error card:
+   ```ts
+   // bff.ts / Wallboard fetch
+   if (response.status === 401) { window.location.href = loginUrl(window.location.origin); return; }
+   ```
 2. **Checks if the token is expired and refreshes it if so** (short-lived tokens will expire during long sessions — a wallboard or polling app will 401 after ~1h without refresh). Use the concurrency-safe row-lock pattern from the `alfadocs-oauth-token-refresh` skill. Store `expires_at` as an **absolute timestamp**, not a delta, so you can compare `expires_at < now()` directly.
 3. Calls AlfaDocs with the headers above (OAuth → `Authorization: Bearer` + `Accept`; **not** `X-Api-Key` — that's the separate API-key scheme).
 4. Returns only what the frontend needs — never the raw token.
@@ -204,3 +227,5 @@ Both are **auth-decoupled** — the kit never touches OAuth or secrets. `@alfado
 | `console.log(token)` | Don't log tokens |
 | Supabase browser client with `persistSession: true` / `localStorage` | Set `persistSession: false, storage: undefined` — the app uses cookie-BFF auth, not Supabase Auth. Supabase Auth session storage is an unused XSS vector here. |
 | Token refresh skipped / `expires_in` stored as a delta | Store `expires_at` as an absolute ISO timestamp (`new Date(Date.now() + expires_in * 1000).toISOString()`) and check `expires_at < now()` before every API call. Long-running sessions (polling, TV wallboards) will 401 after ~1h otherwise. |
+| 401 from Edge Function shows a generic error card | Redirect to `/login` — the session has expired and retrying won't help: `if (res.status === 401) { window.location.href = loginUrl(window.location.origin); return; }` |
+| `String(me.practiceId)` without a null-check | Guard first: `const pid = me.practiceId ?? me.practice_id; if (!pid) throw new Error('missing practiceId');` — `String(undefined)` stores the literal `"undefined"` and every subsequent token lookup silently returns nothing. |

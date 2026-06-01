@@ -131,13 +131,18 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
        const me = await fetchImpl(meUrl, {
          headers: { Authorization: `Bearer ${accessToken.access_token}`, Accept: "application/json" },
        }).then(r => r.json());
+       // Guard: String(undefined) stores "undefined" causing all token lookups to fail
+       const practiceId = me.practiceId ?? me.practice_id;
+       const archiveId  = me.archiveId  ?? me.archive_id;
+       if (!practiceId || !archiveId)
+         throw new Error(`/me missing practiceId/archiveId: ${JSON.stringify(me)}`);
        await supabaseAdmin.from("oauth_tokens").upsert({
-         practice_id: String(me.practiceId), archive_id: String(me.archiveId),
+         practice_id: String(practiceId), archive_id: String(archiveId),
          access_token: accessToken.access_token, refresh_token: accessToken.refresh_token,
          expires_at: new Date(Date.now() + (accessToken.expires_in ?? 3600) * 1000).toISOString(),
          status: "active",
        }, { onConflict: "practice_id,archive_id" });
-       return { practiceId: me.practiceId, archiveId: me.archiveId };
+       return { practiceId, archiveId };
      },
    });
    // Strip Supabase path prefix before handleRequest
@@ -172,6 +177,13 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
    export const Route = createFileRoute("/_authenticated/")({ component: FeatureComponent });
 
 7. NO /callback route in React. NO React Router. NO <Navigate>. NO createBrowserRouter.
+
+8. 401 handling in the frontend — a 401 from the API Edge Function means the session
+   has expired; redirect to /login, don't show a generic error card:
+   ```ts
+   const res = await fetch(`${EDGE}/alfadocs-api/today-schedule`, { credentials: "include" });
+   if (res.status === 401) { window.location.href = loginUrl(window.location.origin); return; }
+   ```
 
 6. Secrets — DO NOT prompt for these during the build. Scaffold everything
    reading from Deno.env.get(...) and leave the values empty. I will add them
