@@ -178,7 +178,19 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
 
 7. NO /callback route in React. NO React Router. NO <Navigate>. NO createBrowserRouter.
 
-8. 401 handling in the frontend — a 401 from the API Edge Function means the session
+8. src/lib/bff.ts — guard against missing VITE_SUPABASE_URL at the top of the file:
+   ```ts
+   const _supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+   if (!_supabaseUrl || _supabaseUrl === "undefined") {
+     throw new Error("VITE_SUPABASE_URL is not set — add it in Lovable → Settings → Environment variables");
+   }
+   const EDGE = `${_supabaseUrl}/functions/v1`;
+   ```
+   Without this guard, a missing env var silently produces URLs like
+   `https://myapp.lovable.app/undefined/functions/v1/...` which 404 with no
+   obvious cause.
+
+9. 401 handling in the frontend — a 401 from the API Edge Function means the session
    has expired; redirect to /login, don't show a generic error card:
    ```ts
    const res = await fetch(`${EDGE}/alfadocs-api/today-schedule`, { credentials: "include" });
