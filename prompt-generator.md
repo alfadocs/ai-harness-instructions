@@ -9,6 +9,24 @@ You do NOT build the app. You produce the prompt that Lovable will use to build 
 
 ---
 
+## Lovable template awareness
+
+Lovable uses **TanStack Start** with file-based routing. Every generated prompt must
+reflect this — not vanilla React Router or Vite + React Router DOM.
+
+Key TanStack Start conventions to use in every prompt:
+- Routes are files: `src/routes/login.tsx`, `src/routes/_authenticated.tsx`,
+  `src/routes/_authenticated/index.tsx`
+- Each route exports `const Route = createFileRoute("/<path>")({ component: ... })`
+- Auth guard = a TanStack **layout route** (`_authenticated.tsx`) with `beforeLoad`
+  that calls `fetchSession()` and throws `redirect({ to: "/login" })` if not authed
+- `<Outlet />` renders child routes — no `<Navigate>` or React Router wrappers
+- Providers go in `src/routes/__root.tsx` wrapping `<Outlet />`
+- Lovable's Supabase integration says "use createServerFn" — **ignore that for AlfaDocs
+  apps**; workspace knowledge (Edge Functions BFF) wins. State this explicitly in the prompt.
+
+---
+
 ## Input
 
 The builder will describe:
@@ -56,12 +74,16 @@ The prompt has four sections — adapt the content but keep the structure:
 ```
 === IMMEDIATE CLEANUP — do this before writing any code ===
 1. Delete src/components/ui/ entirely — Lovable's shadcn boilerplate; never import from @/components/ui/.
-2. Delete: src/integrations/supabase/auth-attacher.ts, auth-middleware.ts,
+2. Delete if they exist: src/integrations/supabase/auth-attacher.ts, auth-middleware.ts,
    src/lib/api/example.functions.ts, src/lib/utils.ts (if only exports cn()),
    src/hooks/use-mobile.tsx (if unused).
-3. Overwrite src/integrations/supabase/client.ts:
+3. Overwrite src/integrations/supabase/client.ts (once Supabase is enabled):
      export { supabase as default, supabase } from "@/lib/supabase";
 4. Add .env to .gitignore. Never commit a .env file.
+5. In src/styles.css — delete the scaffolded :root / .dark block containing raw
+   oklch()/hsl()/hex colour values. ThemeRoot owns those tokens. CSS aliases that
+   map to real kit tokens (e.g. --color-background: var(--background)) are fine;
+   raw colour literals at :root are not.
 ```
 
 ### ARCHITECTURE (always include)
@@ -130,10 +152,26 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
 3. Supabase browser client (src/lib/supabase.ts):
    auth: { persistSession: false, storage: undefined, autoRefreshToken: false }
 
-4. ProtectedRoute: GET /session with credentials:"include".
-   Navigate to /login?app_origin=<encodeURIComponent(location.origin)> if not authenticated.
+4. Auth guard (TanStack Start layout route) — src/routes/_authenticated.tsx:
+   import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+   import { fetchSession } from "@/lib/bff";
+   export const Route = createFileRoute("/_authenticated")({
+     beforeLoad: async () => {
+       const session = await fetchSession();
+       if (!session.authenticated)
+         throw redirect({ to: "/login", search: { app_origin: window.location.origin } });
+     },
+     component: () => <Outlet />,
+   });
 
-5. Two routes only: "/" (protected) + "/login". NO /callback in React.
+5. Login screen — src/routes/login.tsx:
+   export const Route = createFileRoute("/login")({ component: LoginPage });
+   // Use ConnectWithAlfadocs; onConnect → window.location.href = loginUrl(origin)
+
+6. Protected feature — src/routes/_authenticated/index.tsx:
+   export const Route = createFileRoute("/_authenticated/")({ component: FeatureComponent });
+
+7. NO /callback route in React. NO React Router. NO <Navigate>. NO createBrowserRouter.
 
 6. Secrets — DO NOT prompt for these during the build. Scaffold everything
    reading from Deno.env.get(...) and leave the values empty. I will add them
