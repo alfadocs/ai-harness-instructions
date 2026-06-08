@@ -297,14 +297,25 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
    if (res.status === 401) { window.location.href = loginUrl(window.location.origin); return; }
    ```
 
-6. Secrets — DO NOT prompt for these during the build. Scaffold everything
-   reading from Deno.env.get(...) and leave the values empty. I will add them
-   in Supabase Edge Function settings AFTER the first deploy, in this order:
-     a) Deploy → note the Supabase function URL
-     b) Register the OAuth client at app.alfadocs.com/admin/marketplace-apps
-        using that exact callback URL → receive ALFADOCS_CLIENT_ID + SECRET
-     c) Add to Supabase Edge Function secrets:
-        ALFADOCS_CLIENT_ID, ALFADOCS_CLIENT_SECRET, APP_ORIGIN
+6. Secrets & the connect step — DEFER THIS. Do NOT block the build for credentials.
+   - WHILE BUILDING: never ask me for a secret, Client ID/Secret, API key, URL, or any
+     environment value. Do not pause, prompt, or wait. Scaffold every secret reading
+     from `Deno.env.get(...)` with empty values and keep going until the app is fully
+     built and runnable. Asking me to add secrets mid-build is wrong — defer it.
+   - WHEN THE BUILD IS FINISHED and the app runs, STOP and ask me exactly:
+     "The app is built. Are you ready to connect it to AlfaDocs?"
+     Output NOTHING about credentials until I confirm.
+   - ONLY after I confirm, show one "Connect to AlfaDocs" hand-off block with:
+       a) **Callback URL** — `<SUPABASE_URL>/functions/v1/alfadocs-auth/callback`
+          (fill in the deployed Supabase project URL). I paste this EXACTLY when the
+          OAuth client is registered.
+       b) **Where to register / activate** — app.alfadocs.com/admin/marketplace-apps.
+          An AlfaDocs admin registers the client there with the callback URL above and
+          activates it. If I am not an admin, I send these details to my AlfaDocs contact.
+       c) **Scopes / permissions to enable** — the exact list this app uses: <SCOPES>.
+          These must match the client's configured scopes EXACTLY, or activation fails.
+     Then tell me to paste the values I get back into Supabase Edge Function secrets:
+     ALFADOCS_CLIENT_ID, ALFADOCS_CLIENT_SECRET, APP_ORIGIN.
 
 7. alfadocs-api Edge Function:
    - CORS: reject non-matching origins with 403 (not just omit header):
@@ -332,8 +343,14 @@ createAlfadocsSupabaseAuth does NOT exist — do not invent it.
    - Calls AlfaDocs with: X-Api-Key: <key> + Accept: application/json
      (API-key apps use X-Api-Key ONLY — no Authorization: Bearer).
    - GET /me first to obtain practiceId + archiveId; scope every subsequent call to both.
-3. Secret: ALFADOCS_API_KEY in Supabase Edge Function secrets — never .env or VITE_.
-   DO NOT prompt for this during the build. I will add it after the first deploy.
+3. Secret & the connect step — DEFER THIS. ALFADOCS_API_KEY lives in Supabase Edge
+   Function secrets — never .env or VITE_.
+   - WHILE BUILDING: never ask me for the key or pause for it. Scaffold it reading from
+     `Deno.env.get("ALFADOCS_API_KEY")` empty and finish the app.
+   - WHEN THE BUILD IS FINISHED, STOP and ask: "The app is built. Are you ready to
+     connect it to AlfaDocs?" Only after I confirm, tell me to create an API key in
+     AlfaDocs (practice owner) and paste it into the Edge Function secret
+     ALFADOCS_API_KEY. Do not ask for it before then.
 ```
 
 ### UI (always include — adapt the import list to the app's actual components)
