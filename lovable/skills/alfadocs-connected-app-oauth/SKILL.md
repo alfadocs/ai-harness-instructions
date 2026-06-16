@@ -211,7 +211,7 @@ Use **@alfadocs/ui-kit** for all UI (public npm: `npm install @alfadocs/ui-kit`,
 **Don't hand-roll the login screen or the app chrome** — the kit ships both (kit **0.36+**):
 
 - **`ConnectWithAlfadocs`** — the pre-auth "Connect with AlfaDocs" screen. Wire `onConnect` to start the flow below; drive `status` (`idle`/`connecting`/`error`) + `error` from the result.
-- **`MarketplaceAppShell`** — the authed app frame (header product lockup, sidebar nav, account menu). Pass `user` + `onSignOut`.
+- **`MarketplaceAppShell`** — the authed app frame (header brand lockup, sidebar nav, account menu). Storybook: `Patterns/Public/MarketplaceAppShell`. Pass `productName` + `nav` + `user` + `onSignOut` (+ `renderLink` for your router). It brands as **"{productName} by Alfadocs"** (the kit's `maker` lockup, 0.52.0+) — the intended marketplace branding, so leave it as-is rather than rewriting it or adding your own logo.
 
 Both are **auth-decoupled** — the kit never touches OAuth or secrets. `@alfadocs/auth/react`'s `useAlfadocsAuth` hook (now on npm) is a handy client-side source for `user`/auth state, with tokens still held server-side by the BFF. Import from `@alfadocs/ui-kit/patterns/marketplace-app-shell`.
 

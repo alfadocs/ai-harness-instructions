@@ -80,18 +80,25 @@ Reaching for a generic `TextInput` / `Button` / `Dialog` when a specialised one
 exists is the most common mistake. **[component-selection.md](./component-selection.md)**
 maps each legacy pattern → the right component, with an anti-patterns checklist.
 
-### Building a marketplace app? Use the shell
+### Build the app frame from the shell — never hand-roll the chrome
 
-The kit ships the whole app frame and the pre-auth screen as one pattern (kit **0.36+**):
-
-- **`MarketplaceAppShell`** — branded AppFrame: header with the AlfaDocs product lockup, sidebar nav, account menu (avatar + sign-out).
-- **`ConnectWithAlfadocs`** — the pre-auth "Connect with AlfaDocs" screen (`status`: `idle`/`connecting`/`error`).
+**Every AlfaDocs app's chrome — header, sidebar, account menu, and the pre-auth login — comes from ONE kit pattern. Do NOT build your own header / sidebar / top-bar / login screen, and never wrap the app in a shadcn, Material, or Bootstrap layout.** This is the single most common thing apps get wrong. Browse it first in Storybook: **`Patterns/Public/MarketplaceAppShell`** ([storybook.alfadocs.com](https://storybook.alfadocs.com)).
 
 ```tsx
 import { MarketplaceAppShell, ConnectWithAlfadocs } from '@alfadocs/ui-kit/patterns/marketplace-app-shell';
 ```
 
-Auth is **decoupled** — the kit never touches OAuth or secrets. Wire `user`/`onSignOut` and `status`/`onConnect` to your session (e.g. `useAlfadocsAuth` from `@alfadocs/auth/react` + your server-side BFF — see the `alfadocs-connected-app-oauth` skill). Don't hand-roll the header, sidebar, or connect screen.
+- **`MarketplaceAppShell`** — the branded app frame: header brand lockup, sidebar nav, account menu (avatar + sign-out). Key props: `productName`, `nav` (array of `{ id, label, href, icon?, badgeCount?, isActive? }`), `user` (`{ name, email?, avatarSrc? }`), `labels`, `onSignOut`, and `renderLink` wired to your router's `<Link>`. `variant`: `'standalone'` (default — full header + sidebar) or `'embedded'` (for running INSIDE the AlfaDocs platform iframe — drops the header/sidebar/lockup and renders `nav` as a slim top tab strip).
+- **`ConnectWithAlfadocs`** — the pre-auth "Connect with AlfaDocs" screen (`status`: `idle`/`connecting`/`error`; `layout`: `'card'`/`'split'`).
+
+Auth is **decoupled** — the kit never touches OAuth or secrets. Wire `user`/`onSignOut` and `status`/`onConnect` to your session (e.g. `useAlfadocsAuth` from `@alfadocs/auth/react` + your server-side BFF — see the `alfadocs-connected-app-oauth` skill).
+
+#### The brand lockup is "{productName} by Alfadocs" — leave it as-is
+
+The shell brands your app with the kit's **`ProductLockup`** in its **`maker`** variant: it renders **"{productName} by Alfadocs"** — your app name leads, followed by the real Alfadocs wordmark. This is the **correct, intended branding for a marketplace / connected app** (kit **0.52.0+**), and `MarketplaceAppShell` + `ConnectWithAlfadocs` apply it **automatically**. So:
+
+- Just pass your app's name as `productName` and **leave the lockup alone**. Don't rewrite it to "Alfadocs {name}", don't swap in your own logo, and don't restyle the header brand.
+- `ProductLockup`'s other variant — `standard` ("Alfadocs {name}") — is for first-party **internal** AlfaDocs products only. Those are not built on this shell, so you will not use it here.
 
 ## 5. Themes
 
@@ -129,6 +136,7 @@ These keep your UI on-brand, accessible, and theme/RTL-safe. Full detail in [com
 - **No inline `style={{}}`** — use Tailwind utility classes referencing `var(--…)` tokens (e.g. `className="bg-[var(--background)] text-[var(--foreground)]"`). Inline styles bypass the theme system entirely.
 - **Delete `src/components/ui/`** — Lovable scaffolds a shadcn/ui boilerplate folder by default; delete the whole directory. Import every component from `@alfadocs/ui-kit` instead. Never import from `@/components/ui/`.
 - **Delete the scaffolded Tailwind colour block in `src/styles.css`** — Lovable generates a `:root { --background: oklch(…); --foreground: oklch(…); … }` block with raw colour values. Delete it entirely. `ThemeRoot` (from `@alfadocs/ui-kit`) owns those tokens via its `theme-light`/`theme-dark` class; the `:root` block overrides or conflicts with the kit's palette. CSS aliases like `--color-background: var(--background)` are fine; raw `oklch(…)`/`hsl(…)`/`hex` values at `:root` are not.
+- **App chrome comes from the shell** — the header, sidebar, account menu, and login screen are `MarketplaceAppShell` / `ConnectWithAlfadocs` (`@alfadocs/ui-kit/patterns/marketplace-app-shell`), never hand-rolled or a shadcn/Material layout. Leave the shell's "{productName} by Alfadocs" brand lockup as-is — don't override it or drop in your own logo.
 - **Logical properties only** — `margin-inline-start/end`, `padding-inline-start/end`, `text-start/end` (Tailwind `ms-*`/`me-*`/`ps-*`/`pe-*`). Never `margin-left`, `text-right`, `ml-*`, etc.
 - **All strings via `useTranslation()`** — kit strings `ui.*`, your strings `app.*`.
 - **In-app font is `--font-sans`** (Space Grotesk). `--font-serif` (Fraunces) is marketing-only — keep it out of app UI.
