@@ -1,6 +1,6 @@
 # Component catalogue & full consumer rules
 
-Reference detail for `@alfadocs/ui-kit`. The **live, current** catalogue — every variant, state, and prop — is the Storybook at **[storybook.alfadocs.com](https://storybook.alfadocs.com)**. Browse it before building so you reuse what exists instead of reinventing it.
+Reference detail for `@alfadocs/ui-kit`. The **live, current** catalogue — every variant, state, and prop — is the Storybook at **[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)**. Browse it before building so you reuse what exists instead of reinventing it.
 
 ## Component categories (~125 components)
 

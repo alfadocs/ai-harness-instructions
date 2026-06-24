@@ -7,7 +7,7 @@ description: Use when reviewing or auditing the UI / visual design / design-syst
 
 > **Enforces Engineering Standard** (workspace knowledge) §12. Cite the section number when you flag a violation.
 
-A pass/fail audit of an AlfaDocs app's UI against `@alfadocs/ui-kit`. This is the **review counterpart** to the `alfadocs-design-system` build skill — it does not contradict it, it enforces it. The source of truth for what exists is the live catalogue: **[storybook.alfadocs.com](https://storybook.alfadocs.com)**.
+A pass/fail audit of an AlfaDocs app's UI against `@alfadocs/ui-kit`. This is the **review counterpart** to the `alfadocs-design-system` build skill — it does not contradict it, it enforces it. The source of truth for what exists is the live catalogue: **[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)**.
 
 Work through the checklist below in order. The fastest signal comes from a few `grep`-style sweeps over the source (see [audit-greps.md](./audit-greps.md)), then a manual look at the app root and any flagged components.
 
@@ -21,7 +21,7 @@ Work through the checklist below in order. The fastest signal comes from a few `
 The single most important rule. If the kit has a component for it, the app must use it.
 
 - [ ] **No competing UI library** in `package.json` or imports: `@mui/*` / `@material-ui/*`, `bootstrap` / `react-bootstrap`, `@chakra-ui/*`, `@mantine/*`, `antd`, and bare `shadcn`/Radix-copied `components/ui/*` that duplicate kit primitives. Any of these → **blocker**.
-- [ ] **No hand-rolled replacements** for things the kit already ships (custom `<button className="btn">`, bespoke modal, hand-built table, custom toast). Cross-check the category list in [audit-greps.md](./audit-greps.md) against storybook.alfadocs.com — if a kit component exists for it, a hand-rolled one is a **blocker**.
+- [ ] **No hand-rolled replacements** for things the kit already ships (custom `<button className="btn">`, bespoke modal, hand-built table, custom toast). Cross-check the category list in [audit-greps.md](./audit-greps.md) against storybook.alfadocs.cloud — if a kit component exists for it, a hand-rolled one is a **blocker**.
 - [ ] **App chrome uses the shell, not hand-rolled** — the header, sidebar, account menu, and login screen come from `MarketplaceAppShell` + `ConnectWithAlfadocs` (`@alfadocs/ui-kit/patterns/marketplace-app-shell`, Storybook `Patterns/Public/MarketplaceAppShell`), not a custom or shadcn/Material/Bootstrap layout. A hand-rolled app frame, top-bar, sidebar, or login screen → **blocker**. The shell's "{productName} by Alfadocs" brand lockup (kit 0.52.0+) overridden or swapped for a custom logo → **warning**.
 - [ ] **Per-component subpath imports** preferred (`@alfadocs/ui-kit/button`), not deep internal paths (`@alfadocs/ui-kit/dist/...`) or barrel-only when optional peers are missing. Deep `/dist/` import → **warning**. Heavy component (Calendar, DataTable, Chart, PaymentForm, RichTextEditor, PdfViewer) used without its optional peer installed → **blocker** (it will fail to build).
 
@@ -61,7 +61,7 @@ RTL (`ar`) correctness depends on this; the kit gets it for free, the app must n
 
 ## 8. Cross-check against the live catalogue
 
-- [ ] For anything that looks bespoke, confirm on **storybook.alfadocs.com** whether a kit component, variant, or prop already covers it. If it does, the bespoke version is at least a **warning** (re-implementing the kit) and usually a **blocker** (it won't theme/RTL/a11y-match).
+- [ ] For anything that looks bespoke, confirm on **storybook.alfadocs.cloud** whether a kit component, variant, or prop already covers it. If it does, the bespoke version is at least a **warning** (re-implementing the kit) and usually a **blocker** (it won't theme/RTL/a11y-match).
 - [ ] Confirm component **variants and states** used by the app actually exist in the kit (don't invent a `variant` the kit doesn't expose).
 
 ---

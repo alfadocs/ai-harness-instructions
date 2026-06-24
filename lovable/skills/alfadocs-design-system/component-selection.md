@@ -7,7 +7,7 @@ element, find its row below and use that component. If nothing fits, see
 ["When nothing fits"](#when-nothing-fits) — do **not** hand-roll.
 
 The live, authoritative catalogue (every variant + prop) is
-**[storybook.alfadocs.com](https://storybook.alfadocs.com)**.
+**[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)**.
 
 ## Form inputs
 

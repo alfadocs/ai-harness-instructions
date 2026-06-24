@@ -3,7 +3,7 @@
 Fast first-pass sweeps for an AlfaDocs UI design-system review. Run these over the
 app source (usually `src/`), then eyeball the hits. None of these are
 authoritative on their own — they surface candidates; you confirm each against
-[storybook.alfadocs.com](https://storybook.alfadocs.com) and the rules in
+[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud) and the rules in
 `SKILL.md`. Adjust paths to the repo layout.
 
 ## 1. Competing UI libraries (BLOCKER)
@@ -109,7 +109,7 @@ If the app imports any of these, confirm the optional peer is in `package.json`:
 ## Catalogue cross-reference
 
 Before calling anything bespoke "necessary", confirm the kit doesn't already cover
-it on **storybook.alfadocs.com**. The ~125 components span:
+it on **storybook.alfadocs.cloud**. The ~125 components span:
 
 | Category | Examples (confirm exact names/props in Storybook) |
 |---|---|

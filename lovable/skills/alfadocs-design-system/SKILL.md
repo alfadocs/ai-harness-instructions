@@ -11,7 +11,7 @@ description: Use when building or styling ANY UI, page, screen, or component for
 
 > Build the UI out of `@alfadocs/ui-kit` components. If the kit has a component for what you need (button, input, dialog, card, table…), use it. Never reach for Material UI, Bootstrap, shadcn/ui, Chakra, or hand-rolled CSS.
 
-Before building anything, browse the live catalogue so you know what already exists: **[storybook.alfadocs.com](https://storybook.alfadocs.com)** is the source of truth for every component, variant, state, and prop.
+Before building anything, browse the live catalogue so you know what already exists: **[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)** is the source of truth for every component, variant, state, and prop.
 
 ## 1. Install
 
@@ -82,7 +82,7 @@ maps each legacy pattern → the right component, with an anti-patterns checklis
 
 ### Build the app frame from the shell — never hand-roll the chrome
 
-**Every AlfaDocs app's chrome — header, sidebar, account menu, and the pre-auth login — comes from ONE kit pattern. Do NOT build your own header / sidebar / top-bar / login screen, and never wrap the app in a shadcn, Material, or Bootstrap layout.** This is the single most common thing apps get wrong. Browse it first in Storybook: **`Patterns/Public/MarketplaceAppShell`** ([storybook.alfadocs.com](https://storybook.alfadocs.com)).
+**Every AlfaDocs app's chrome — header, sidebar, account menu, and the pre-auth login — comes from ONE kit pattern. Do NOT build your own header / sidebar / top-bar / login screen, and never wrap the app in a shadcn, Material, or Bootstrap layout.** This is the single most common thing apps get wrong. Browse it first in Storybook: **`Patterns/Public/MarketplaceAppShell`** ([storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)).
 
 ```tsx
 import { MarketplaceAppShell, ConnectWithAlfadocs } from '@alfadocs/ui-kit/patterns/marketplace-app-shell';
@@ -132,7 +132,7 @@ import '@alfadocs/ui-kit/i18n';
 These keep your UI on-brand, accessible, and theme/RTL-safe. Full detail in [components-and-rules.md](./components-and-rules.md). The short version:
 
 - **Tokens, not literals** — every colour/spacing/radius/shadow/font uses a `var(--…)` token, never raw hex/rgb/hsl.
-- **NEVER invent token names.** The kit's real semantic tokens are `--background`, `--foreground`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--ring`, `--destructive`, `--destructive-foreground`, `--accent`, `--accent-foreground`, `--success`, `--warning`, `--error`, `--info`. Aliases like `--color-background`, `--color-danger`, `--color-text-muted`, `--ds-font-sans` **do not exist** — they silently fall back to hardcoded hex, breaking all four themes. When unsure, check [storybook.alfadocs.com](https://storybook.alfadocs.com) or `src/tokens/index.css`.
+- **NEVER invent token names.** The kit's real semantic tokens are `--background`, `--foreground`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--ring`, `--destructive`, `--destructive-foreground`, `--accent`, `--accent-foreground`, `--success`, `--warning`, `--error`, `--info`. Aliases like `--color-background`, `--color-danger`, `--color-text-muted`, `--ds-font-sans` **do not exist** — they silently fall back to hardcoded hex, breaking all four themes. When unsure, check [storybook.alfadocs.cloud](https://storybook.alfadocs.cloud) or `src/tokens/index.css`.
 - **No inline `style={{}}`** — use Tailwind utility classes referencing `var(--…)` tokens (e.g. `className="bg-[var(--background)] text-[var(--foreground)]"`). Inline styles bypass the theme system entirely.
 - **Delete `src/components/ui/`** — Lovable scaffolds a shadcn/ui boilerplate folder by default; delete the whole directory. Import every component from `@alfadocs/ui-kit` instead. Never import from `@/components/ui/`.
 - **Delete the scaffolded Tailwind colour block in `src/styles.css`** — Lovable generates a `:root { --background: oklch(…); --foreground: oklch(…); … }` block with raw colour values. Delete it entirely. `ThemeRoot` (from `@alfadocs/ui-kit`) owns those tokens via its `theme-light`/`theme-dark` class; the `:root` block overrides or conflicts with the kit's palette. CSS aliases like `--color-background: var(--background)` are fine; raw `oklch(…)`/`hsl(…)`/`hex` values at `:root` are not.
@@ -152,4 +152,4 @@ If your UI talks to the AlfaDocs API or OAuth, API keys and the OAuth client sec
 
 - [Which component for which job](./component-selection.md) — pick the right primitive
 - [Component catalogue + full consumer rules](./components-and-rules.md)
-- Live Storybook: **[storybook.alfadocs.com](https://storybook.alfadocs.com)**
+- Live Storybook: **[storybook.alfadocs.cloud](https://storybook.alfadocs.cloud)**

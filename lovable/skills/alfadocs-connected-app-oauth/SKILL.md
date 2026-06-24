@@ -247,7 +247,7 @@ if (req.method !== "GET" && req.headers.get("x-requested-with") !== "XMLHttpRequ
 
 ## UI / design system
 
-Use **@alfadocs/ui-kit** for all UI (public npm: `npm install @alfadocs/ui-kit`, React 18 or 19). Import tokens once at the app root, wrap the tree in `<ThemeRoot theme="light">`, route all visible strings through `useTranslation()`, and reference `var(--*)` tokens instead of hex/rgb. Browse components at **storybook.alfadocs.com**. If the component you want isn't there, stop and ask rather than pulling in another UI library.
+Use **@alfadocs/ui-kit** for all UI (public npm: `npm install @alfadocs/ui-kit`, React 18 or 19). Import tokens once at the app root, wrap the tree in `<ThemeRoot theme="light">`, route all visible strings through `useTranslation()`, and reference `var(--*)` tokens instead of hex/rgb. Browse components at **storybook.alfadocs.cloud**. If the component you want isn't there, stop and ask rather than pulling in another UI library.
 
 **Don't hand-roll the login screen or the app chrome** — the kit ships both (kit **0.36+**):
 

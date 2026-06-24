@@ -9,7 +9,7 @@ description: Use when reviewing or auditing an AlfaDocs app for accessibility (a
 
 A checklist for auditing the accessibility of an AlfaDocs app (Lovable + Supabase, UI built with `@alfadocs/ui-kit`).
 
-**Core principle:** the kit's components are already axe-clean and ship four themes (incl. AAA-accessible) plus RTL support. **Most a11y wins are inherited — most a11y bugs are introduced by overriding the kit.** So the review is mostly: *did we break what was given for free?* Live component reference: **storybook.alfadocs.com**.
+**Core principle:** the kit's components are already axe-clean and ship four themes (incl. AAA-accessible) plus RTL support. **Most a11y wins are inherited — most a11y bugs are introduced by overriding the kit.** So the review is mostly: *did we break what was given for free?* Live component reference: **storybook.alfadocs.cloud**.
 
 Walk every screen, dialog, drawer, toast, form, and empty/loading/error state. For deeper rationale on any item, see [a11y-checklist.md](./a11y-checklist.md).
 

@@ -1,6 +1,6 @@
 # AlfaDocs accessibility review — detail & rationale
 
-Expanded notes behind the [SKILL.md](./SKILL.md) checklist. The principle throughout: **`@alfadocs/ui-kit` components are axe-core-clean and ship four themes (including an AAA-accessible one) plus automatic RTL. You inherit all of that for free — the fastest way to lose it is to override the kit or replace its primitives with custom markup.** Live reference: storybook.alfadocs.com.
+Expanded notes behind the [SKILL.md](./SKILL.md) checklist. The principle throughout: **`@alfadocs/ui-kit` components are axe-core-clean and ship four themes (including an AAA-accessible one) plus automatic RTL. You inherit all of that for free — the fastest way to lose it is to override the kit or replace its primitives with custom markup.** Live reference: storybook.alfadocs.cloud.
 
 ---
 

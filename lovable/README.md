@@ -95,4 +95,4 @@ description: Use when … (the trigger Lovable matches on)
 
 Keep facts current: AlfaDocs apps are built in **Lovable + Supabase**; secrets live
 in **Supabase Edge Function secrets**; `@alfadocs/ui-kit` is on **public npm**; the
-design system catalogue is at **storybook.alfadocs.com**.
+design system catalogue is at **storybook.alfadocs.cloud**.

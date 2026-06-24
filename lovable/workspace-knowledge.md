@@ -30,7 +30,7 @@ Strictest possible CSP: no inline scripts/styles unless nonced; no `unsafe-eval`
 
 ## 6. External API Calls
 
-- **Confirm the contract before mapping.** Check the API docs (AlfaDocs: <https://app.alfadocs.com/api.html>) for the exact path, params, response **envelope** (`{data}` vs `{results}` vs bare array) and **field names**, then map a real response. Guessing — `a.startsAt ?? a.starts_at`, or assuming an embedded object where the API returns an id — is a defect, not defensiveness.
+- **Confirm the contract before mapping.** Check the API docs (AlfaDocs: <https://app.alfadocs.com/api.html>) for the exact path, params, response **envelope** (`{data}` vs `{results}` vs bare array) and **field names**, then map a real response. Guessing fields or envelope is a defect, not defensiveness.
 - Treat a library's documented return type as the contract — a value may be a **string** where you assumed an object (e.g. an auth callback's `accessToken`); a wrong guess fails *silently* and stores `undefined`.
 - Centralize headers, base URLs, retry, and auth in one client per integration — never inline `fetch` with hand-rolled headers in components/hooks.
 - Refresh + use tokens within one request scope. With refresh-token **rotation**, serialize refreshes behind a real lock (single-flight/conditional update) — parallel refreshes trade rotated-away tokens and revoke the session. A lock column nothing reads is not a lock.
@@ -65,6 +65,7 @@ Strictest possible CSP: no inline scripts/styles unless nonced; no `unsafe-eval`
 - No magic strings/numbers — centralize storage keys, endpoint paths, query keys, limits, timeouts, retries.
 - Names describe intent; booleans are predicates (`isActive`, `hasAccess`); hooks start with `use`.
 - Default to **no comments**; add one only when the *why* is non-obvious, never to narrate the *what*.
+- No emoji anywhere — copy, headings, UI, comments, commits.
 
 ## 11. When Integrating with AlfaDocs
 

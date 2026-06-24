@@ -82,7 +82,7 @@ Build all UI with the AlfaDocs design system (public npm package):
 - Reference colours, spacing, radii via the `var(--*)` tokens — never raw hex/rgb/hsl.
 - Put user-visible strings through `useTranslation()` under the `app` namespace (kit strings use `ui.*`).
 - Don't reach for Material UI, Bootstrap, shadcn, Chakra, Mantine, or hand-rolled CSS. If a component you need isn't in the kit, stop and ask rather than pulling in an external library.
-- Browse available components at **https://storybook.alfadocs.com**.
+- Browse available components at **https://storybook.alfadocs.cloud**.
 
 ## Getting the API key
 

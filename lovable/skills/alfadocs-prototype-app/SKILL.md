@@ -18,7 +18,7 @@ If the thing you're building needs real users, real data, or real AlfaDocs acces
 
 ## What to do
 
-- **Build all UI with `@alfadocs/ui-kit`** so the mockup looks like real AlfaDocs — follow `alfadocs-design-system` for the wiring (import `@alfadocs/ui-kit/tokens` once, wrap in `ThemeRoot` + `I18nextProvider` + `TooltipProvider` + `Toaster`, use `MarketplaceAppShell` for the app chrome). Browse components at **storybook.alfadocs.com** and reach for the dedicated primitive (DataTable, Card, Dialog, EmptyState, …) rather than hand-rolling.
+- **Build all UI with `@alfadocs/ui-kit`** so the mockup looks like real AlfaDocs — follow `alfadocs-design-system` for the wiring (import `@alfadocs/ui-kit/tokens` once, wrap in `ThemeRoot` + `I18nextProvider` + `TooltipProvider` + `Toaster`, use `MarketplaceAppShell` for the app chrome). Browse components at **storybook.alfadocs.cloud** and reach for the dedicated primitive (DataTable, Card, Dialog, EmptyState, …) rather than hand-rolling.
 - **Mock data is inline**, in plain TS fixtures, each clearly marked `// mock — replace before shipping`. Use realistic-but-fake content — **never real customer names and never real PHI**.
 - Strings via `useTranslation('app')`; `var(--…)` kit tokens only (no inline styles, no raw hex); logical properties.
 
