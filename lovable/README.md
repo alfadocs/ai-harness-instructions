@@ -15,6 +15,7 @@ skills/                  → import into Lovable as workspace skills (loaded on 
     alfadocs-connected-app-api-key/   single-practice tool with an API key
     alfadocs-staff-sso-app/           internal staff tool (Google Workspace SSO + own data)
     alfadocs-google-workspace-auth/   @alfadocs.com staff login via Supabase Auth
+    alfadocs-prototype-app/           internal mockups & prototypes (no backend)
     alfadocs-design-system/           build UI with @alfadocs/ui-kit
     alfadocs-webhooks/                receive & parse AlfaDocs webhooks
     alfadocs-oauth-token-refresh/     concurrency-safe token refresh
@@ -59,6 +60,7 @@ so a review enforces it 1:1.
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-connected-app-api-key`
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-staff-sso-app`
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-google-workspace-auth`
+   - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-prototype-app`
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-design-system`
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-webhooks`
    - `https://github.com/alfadocs/ai-harness-instructions/tree/main/lovable/skills/alfadocs-oauth-token-refresh`
