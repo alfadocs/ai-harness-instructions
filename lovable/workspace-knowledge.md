@@ -18,7 +18,7 @@ Check for existing functions, hooks, services, or edge functions before writing 
 
 ## 3. Type Safety & Boundary Validation
 
-Keep `tsconfig.json` strict; never weaken `strict`/`no*` flags (full config → `alfadocs-typescript-setup`). No `any`/`as`/`@ts-ignore` — prefer `unknown` and narrow. `array[i]`/`record[key]` are possibly `undefined`. Every service method has an explicit return type. Validate every external response with Zod at the service boundary — no `x.id ?? x.Id` fallback chains. All branches return; switches exhaustive. Use `@/*` alias, not `../../../`. No unused imports.
+Keep `tsconfig.json` strict; never weaken `strict`/`no*` flags (full config → `alfadocs-typescript-setup`). No `any`/`as`/`@ts-ignore` — prefer `unknown` and narrow. `array[i]`/`record[key]` are possibly `undefined`. Every service method has an explicit return type. Validate every external response with Zod at the service boundary. All branches return; switches exhaustive. Use `@/*` alias, not `../../../`. No unused imports.
 
 ## 4. Multi-Tenant Isolation
 
@@ -26,12 +26,12 @@ Every read/write/update/delete scoped by tenant; no cross-tenant leakage. Handle
 
 ## 5. XSS / CSP
 
-Strictest possible CSP: no inline scripts/styles unless nonced; no `unsafe-eval`/`unsafe-inline`; whitelist `img-src`/`connect-src`/`script-src`/`style-src`/`font-src` to known origins. Replace generic OG/Twitter images with project-branded assets. Sanitize anything rendered as HTML; prefer text by default.
+Strictest possible CSP: no inline scripts/styles unless nonced; no `unsafe-eval`/`unsafe-inline`; whitelist `img-src`/`connect-src`/`script-src`/`style-src`/`font-src` to known origins. Sanitize anything rendered as HTML; prefer text by default.
 
 ## 6. External API Calls
 
 - **Confirm the contract before mapping.** Check the API docs (AlfaDocs: <https://app.alfadocs.com/api.html>) for the exact path, params, response **envelope** (`{data}` vs `{results}` vs bare array) and **field names**, then map a real response. Guessing fields or envelope is a defect, not defensiveness.
-- Treat a library's documented return type as the contract — a value may be a **string** where you assumed an object (e.g. an auth callback's `accessToken`); a wrong guess fails *silently* and stores `undefined`.
+- Treat a library's documented return type as the contract — a value may be a **string** where you assumed an object; a wrong guess fails *silently* and stores `undefined`.
 - Centralize headers, base URLs, retry, and auth in one client per integration — never inline `fetch` with hand-rolled headers in components/hooks.
 - Refresh + use tokens within one request scope. With refresh-token **rotation**, serialize refreshes behind a real lock (single-flight/conditional update) — parallel refreshes trade rotated-away tokens and revoke the session. A lock column nothing reads is not a lock.
 - Explicit timeouts on every outbound call.
@@ -77,21 +77,21 @@ Specializes §4, §6, §7 for AlfaDocs.
 
 **Token expiry** — OAuth tokens expire (~1h). Store `expires_at` absolute; check before every call and refresh if expired (→ `oauth-token-refresh`). Never skip in polling/long-running apps.
 
-**Multi-practice token safety** — never use Practice A's token for Practice B. Scope refresh + use to one practice per request; re-read the token immediately before the upstream call to defeat refresh races.
+**Multi-practice token safety** — never use Practice A's token for Practice B; re-read the token immediately before the upstream call to defeat refresh races.
 
 **Webhooks from AlfaDocs**
 - Always respond **HTTP 200** — never 202 (AlfaDocs treats it as an error).
 - Content-Type is `application/x-www-form-urlencoded`, **not JSON**.
-- Keys use indexed brackets (`0[event]`, `0[data][created_entity][archiveId]`); one call may carry multiple events — parse with `groupFormDataToEvents`.
+- Keys use indexed brackets; one call may carry multiple events — parse with `groupFormDataToEvents`.
 - Practice lookup uses `archiveId` from the payload, not `practiceId`.
 
 ## 12. UI — AlfaDocs Design System
 
-Build **all** UI with **`@alfadocs/ui-kit`** (public npm; React 18 & 19). Never Material UI, Bootstrap, shadcn, Chakra, Mantine, or hand-rolled CSS.
+Build **all** UI with **`@alfadocs/ui-kit`** (public npm; React 18 & 19). Never Material UI, Bootstrap, shadcn, Chakra, Mantine, or hand-rolled CSS. **Kit-first: ~175 components ship — if one exists, you MUST use it; hand-rolling or inventing one it already has is a defect. Look it up first; if genuinely missing, STOP and ask — never fake it with styled `<div>`s or another library.** Every person/name renders via the kit `Avatar`, one name format everywhere.
 
 - Import tokens **once** at root (`import '@alfadocs/ui-kit/tokens'`); wrap the tree in `ThemeRoot` + `I18nextProvider` + `TooltipProvider` + `Toaster`.
 - Import components **per path** (`import { Button } from '@alfadocs/ui-kit/button'`); providers from the barrel.
-- Use the **dedicated** primitive — `PhoneInput`, `OtpInput`, `DataTable`, `AlertDialog` (destructive), `EmptyState`, `ContactCard`, `SignInWithAlfadocsButton` — never a generic `TextInput`/`Button`/`Dialog` when one exists.
+- Use the **dedicated** primitive — `Avatar` (every person/name), `PhoneInput`, `OtpInput`, `DataTable`, `AlertDialog` (destructive), `EmptyState`, `ContactCard`, `SignInWithAlfadocsButton` — never a generic `TextInput`/`Button`/`Dialog` when one exists.
 - **Never invent `var(--…)` names** (`--color-background`, `--color-danger`… don't exist — they silently fall to hex and break themes). Real tokens: `--background`, `--foreground`, `--muted-foreground`, `--card`, `--primary`, `--border`, `--ring`, `--destructive`, `--success`, `--warning`, `--error`.
 - **No `style={{}}`** — Tailwind + `var(--…)` tokens only; no raw hex.
 - **Delete `src/components/ui/`** on every new Lovable project (shadcn boilerplate — import from `@alfadocs/ui-kit` only).
@@ -105,13 +105,13 @@ Build **all** UI with **`@alfadocs/ui-kit`** (public npm; React 18 & 19). Never 
 - `new Service()` inside a component/hook body
 - Component > 150 lines or > 5 state slots
 - `useEffect(..., [])` calling closures whose identity isn't stable
-- Field-name fallback chains / mapping an endpoint whose shape you haven't confirmed at `app.alfadocs.com/api.html` (guessing fields or envelope)
 - Two JSX blocks differing only in props
 - Handlers reading tenant IDs (`practiceId`/`archiveId`) from input without authorizing them
 - Returning 202 (or any non-200) to AlfaDocs webhooks
 - Hand-rolled `fetch` with inline auth in UI code; `console.log` in committed code
 - A UI library other than `@alfadocs/ui-kit`; importing from `@/components/ui/`
-- Inline `style={{}}` or invented `var(--color-*)` names; raw hex/rgb; a generic primitive where a dedicated kit one exists
+- Inline `style={{}}` or invented `var(--color-*)` names; raw hex/rgb
+- Reinventing a kit component (badge/table/modal/avatar/…) as styled `<div>`s instead of importing it; a person/name not rendered via `Avatar`
 
 **Default: smaller, narrower, more composable.**
 
