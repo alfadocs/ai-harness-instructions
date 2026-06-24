@@ -4,6 +4,15 @@ Detailed companion to the `alfadocs-oauth-token-refresh` skill. Read the SKILL.m
 
 All tokens live in a Supabase `oauth_tokens` table, read/written only from Supabase Edge Functions using the service-role client (`supabaseAdmin`). The OAuth client secret and any API secrets live in Supabase Edge Function secrets — never in the frontend, never in a committed `.env`.
 
+Build `supabaseAdmin` from `AUTH_SUPABASE_URL || SUPABASE_URL` and `AUTH_SUPABASE_KEY || SUPABASE_SERVICE_ROLE_KEY` — Lovable Cloud auto-injects `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`, while a standalone Supabase project uses the `AUTH_*` names, so reading both makes the token store work in either setup.
+
+```ts
+const supabaseAdmin = createClient(
+  Deno.env.get("AUTH_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("AUTH_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+```
+
 ## Complete token-refresh flow (token manager)
 
 A single `getValidToken(supabaseAdmin, { practiceId, archiveId, forceRefresh })` function should run:

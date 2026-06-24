@@ -12,6 +12,15 @@ This skill is the safe pattern. Follow it exactly.
 ## Non-negotiables (read first)
 
 1. **Tokens live server-side only.** Store `access_token` and `refresh_token` in a Supabase table, read/written exclusively from Edge Functions using the service-role key. Never send a refresh token to the browser, never put any token in `.env` committed to git, never expose the OAuth client secret to the frontend. Secrets go in Supabase Edge Function secrets.
+
+   Build the service-role client (`supabaseAdmin`) from `AUTH_SUPABASE_URL || SUPABASE_URL` and `AUTH_SUPABASE_KEY || SUPABASE_SERVICE_ROLE_KEY` — Lovable Cloud auto-injects `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`, while a standalone Supabase project uses the `AUTH_*` names, so reading both makes the token store work in either setup.
+
+   ```ts
+   const supabaseAdmin = createClient(
+     Deno.env.get("AUTH_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL")!,
+     Deno.env.get("AUTH_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+   );
+   ```
 2. **One token per practice/archive.** Each AlfaDocs practice (and its archive) has its own token. **Never** use one practice's token to call the API for another practice. Scope every read and write by `practice_id` + `archive_id`.
 3. **Persist the rotated refresh token with `??`, never `||`.** Rotation may legitimately return an empty-string field; `||` would silently fall back to the now-revoked old token and brick the connection.
 
@@ -121,6 +130,7 @@ The complete flow (step-by-step token-manager logic, retry helper, proactive cro
 ## Quick checklist
 
 - [ ] Tokens stored in Supabase, read/written only from Edge Functions; nothing token-related in the browser or committed `.env`.
+- [ ] `supabaseAdmin` built from `AUTH_SUPABASE_URL || SUPABASE_URL` and `AUTH_SUPABASE_KEY || SUPABASE_SERVICE_ROLE_KEY` (works on Lovable Cloud and standalone Supabase).
 - [ ] Every query scoped by `practice_id` + `archive_id`; no cross-practice token reuse.
 - [ ] Refresh persisted with `??`, never `||`.
 - [ ] Row-level lock on `refresh_locked_at` (2-min stale threshold); lock released in `finally`.

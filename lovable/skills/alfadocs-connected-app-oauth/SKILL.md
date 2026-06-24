@@ -46,8 +46,11 @@ const auth = createAlfadocsAuth({
   appOrigin:    Deno.env.get("ALLOWED_ORIGIN")!,          // your frontend origin
   // scopes: [ ... ]  — see Step 5
   storage: createSupabaseStorage({
-    supabaseUrl:    Deno.env.get("AUTH_SUPABASE_URL")!,    // project holding alfa_* tables (= SUPABASE_URL if one project)
-    serviceRoleKey: Deno.env.get("AUTH_SUPABASE_KEY")!,    // SERVICE ROLE — never the anon key, never the browser
+    // Lovable Cloud auto-injects SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY; standalone
+    // Supabase uses the AUTH_* secrets you set in Step 3. Read both so the same code
+    // works in either environment.
+    supabaseUrl:    Deno.env.get("AUTH_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL")!,                 // project holding alfa_* tables
+    serviceRoleKey: Deno.env.get("AUTH_SUPABASE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,    // SERVICE ROLE — never the anon key, never the browser
     oauthClientId:  Deno.env.get("ALFADOCS_CLIENT_ID")!,   // scopes the multi-tenant app_id on every row
   }),
   resolveProfile: async ({ accessToken, tokenResponse, meUrl, fetchImpl }) => {
@@ -56,28 +59,43 @@ const auth = createAlfadocsAuth({
     const me = await fetchImpl(meUrl, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     }).then(r => r.json());
-    // /me wraps the profile under `.data`. And String(undefined) stores the literal
+    // The real /me is { status, data: { practiceId, archiveId, ownerEmail, userId, userEmail } }.
+    // It wraps the profile under `.data`. And String(undefined) stores the literal
     // "undefined" as practice_id, making every later token lookup silently miss.
     const profile = me?.data && typeof me.data === "object" ? me.data : me;
     const practiceId = profile.practiceId ?? profile.practice_id;
     const archiveId  = profile.archiveId  ?? profile.archive_id;
+    // The lib's userIdFromProfile reads the user id from THIS return value (top-level
+    // `userId`, or `return.data.userId`). If it's absent the lib throws
+    // "Profile does not contain userId" and persists NO user/session — login silently fails.
+    const userId   = profile.userId ?? profile.user_id ?? profile.id;
+    const username = profile.userEmail ?? profile.ownerEmail;   // /me has no `email`/`username`
     if (!practiceId || !archiveId)
       throw new Error(`/me missing practiceId/archiveId: ${JSON.stringify(me)}`);
+    if (!userId)
+      throw new Error(`/me missing userId: ${JSON.stringify(me)}`);
     await supabaseAdmin.from("oauth_tokens").upsert({
       practice_id: String(practiceId), archive_id: String(archiveId),
       access_token: accessToken, refresh_token: tokenResponse.refresh_token,
       expires_at: new Date(Date.now() + (tokenResponse.expires_in ?? 3600) * 1000).toISOString(),
       status: "active",
     }, { onConflict: "practice_id,archive_id" });
-    return { practiceId, archiveId };
+    // userId MUST be returned at the top level (the lib reads return.userId / return.data.userId).
+    return { userId: String(userId), username, practiceId, archiveId };
   },
 });
 
 // Supabase serves this at /functions/v1/alfadocs-auth/<path>, but handleRequest expects
 // bare /login, /callback, … — strip the prefix first, or no route matches.
+// Supabase OFTEN passes the path WITHOUT /functions/v1 (just /alfadocs-auth/login),
+// so strip BOTH prefixes. A single-prefix strip leaves /alfadocs-auth/login intact
+// → every route 404s in production even though it worked locally.
 Deno.serve((req) => {
   const u = new URL(req.url);
-  const inner = u.pathname.replace(/^\/functions\/v1\/alfadocs-auth/, "") || "/";
+  const inner = u.pathname
+    .replace(/^\/functions\/v1\/alfadocs-auth/, "")  // gateway form
+    .replace(/^\/alfadocs-auth/, "")                 // bare form Supabase often sends
+    || "/";
   // new Request() requires an absolute URL — reconstruct from base, not bare path
   return auth.handleRequest(new Request(new URL(inner + u.search, req.url).href, req));
 });
@@ -110,6 +128,8 @@ AUTH_SUPABASE_KEY         # that project's SERVICE ROLE key — server-only, nev
 
 **Never** put any of these in `.env`, in a `VITE_*` variable, or in committed files. Secrets in git are unrecoverable. The frontend only ever needs `VITE_SUPABASE_URL` (the function base URL) — not the client ID or secret.
 
+`VITE_SUPABASE_URL` must be present **at build time** (Vite inlines `import.meta.env` during the build, not at runtime). On **Lovable Cloud**, commit a `.env` containing `VITE_SUPABASE_URL=https://<project-ref>.supabase.co` so it's in the build — this is the one safe `VITE_*`/`.env` value (a public function base URL, never a secret). If it's absent the frontend can't reach the Edge Function and login dead-links (see Step 6).
+
 ## Step 4 — The Callback URL must match exactly
 
 The Callback URL you register with AlfaDocs is **this Edge Function's `/callback` route**, and it is the same value as `ALFADOCS_REDIRECT_URI`:
@@ -126,27 +146,47 @@ Scopes are a single **space-separated** `scope` value. The user sees them on the
 
 ## Step 6 — The React side (two routes, no auth library)
 
+Derive the auth base from `VITE_SUPABASE_URL` — but if it's missing, **do not fall
+back to a relative path** (`/functions/v1/...`). A relative URL dead-links to your own
+app's empty page instead of the Edge Function, so login looks "broken" with no error.
+When the env var is absent, surface a clear "not configured" state instead:
+
+```tsx
+// src/lib/edge.ts — single source for the Edge Function base URL
+const _url = import.meta.env.VITE_SUPABASE_URL;
+// Never silently fall back to a relative path — that dead-links to an empty page.
+export const AUTH_CONFIGURED = Boolean(_url && _url !== "undefined");
+export const EDGE = AUTH_CONFIGURED
+  ? `${_url}/functions/v1/alfadocs-auth`
+  : null;
+```
+
 ```tsx
 // src/components/LoginPage.tsx
-const EDGE = import.meta.env.VITE_SUPABASE_URL + "/functions/v1/alfadocs-auth";
-export const LoginPage = () => <a href={`${EDGE}/login`}>Sign in with AlfaDocs</a>;
+import { EDGE, AUTH_CONFIGURED } from "@/lib/edge";
+export const LoginPage = () =>
+  AUTH_CONFIGURED
+    ? <a href={`${EDGE}/login`}>Sign in with AlfaDocs</a>
+    : <p>Sign-in is not configured (VITE_SUPABASE_URL missing from the build).</p>;
 ```
 
 ```tsx
 // src/components/ProtectedRoute.tsx
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
-
-const EDGE = import.meta.env.VITE_SUPABASE_URL + "/functions/v1/alfadocs-auth";
+import { EDGE, AUTH_CONFIGURED } from "@/lib/edge";
 
 export const ProtectedRoute = () => {
   const [state, setState] = useState<"loading" | "authed" | "anon">("loading");
   useEffect(() => {
+    if (!AUTH_CONFIGURED) return;   // nothing to call — keep hooks unconditional
     fetch(`${EDGE}/session`, { credentials: "include" })   // credentials: "include" is required
       .then(r => r.json())
       .then(({ authenticated }) => setState(authenticated ? "authed" : "anon"))
       .catch(() => setState("anon"));
   }, []);
+  // Surface a clear "not configured" state — never dead-link to a relative path.
+  if (!AUTH_CONFIGURED) return <p>Sign-in is not configured (VITE_SUPABASE_URL missing from the build).</p>;
   if (state === "loading") return <Spinner />;
   if (state === "anon") return <Navigate to="/login" replace />;
   return <Outlet />;
@@ -169,7 +209,8 @@ const headers = {
 };
 
 const me = await fetch("https://app.alfadocs.com/api/v1/me", { headers }).then(r => r.json());
-const { practiceId, archiveId } = me;   // required for every other endpoint
+// /me wraps the profile under `.data`: { status, data: { practiceId, archiveId, userId, userEmail, ... } }
+const { practiceId, archiveId } = me.data;   // required for every other endpoint
 
 // e.g. list patients
 await fetch(
@@ -232,4 +273,7 @@ Both are **auth-decoupled** — the kit never touches OAuth or secrets. `@alfado
 | Token refresh skipped / `expires_in` stored as a delta | Store `expires_at` as an absolute ISO timestamp (`new Date(Date.now() + expires_in * 1000).toISOString()`) and check `expires_at < now()` before every API call. Long-running sessions (polling, TV wallboards) will 401 after ~1h otherwise. |
 | 401 from Edge Function shows a generic error card | Redirect to `/login` — the session has expired and retrying won't help: `if (res.status === 401) { window.location.href = loginUrl(window.location.origin); return; }` |
 | `String(me.practiceId)` without a null-check | Guard first: `const pid = me.practiceId ?? me.practice_id; if (!pid) throw new Error('missing practiceId');` — `String(undefined)` stores the literal `"undefined"` and every subsequent token lookup silently returns nothing. |
-| `const EDGE = \`${import.meta.env.VITE_SUPABASE_URL}/functions/v1\`` without a guard | Add a startup assertion: `if (!_url \|\| _url === "undefined") throw new Error("VITE_SUPABASE_URL not set")` — without it, missing env produces URLs like `https://myapp.lovable.app/undefined/functions/v1/...` that 404 with no obvious cause. |
+| `const EDGE = \`${import.meta.env.VITE_SUPABASE_URL}/functions/v1\`` without a guard | Guard the env var and **never fall back to a relative path**: `if (!_url \|\| _url === "undefined")` → surface a "not configured" state. A relative `/functions/v1/...` dead-links to your own empty page; an `undefined` value produces `https://myapp.lovable.app/undefined/functions/v1/...` that 404s with no obvious cause. Ensure `VITE_SUPABASE_URL` is in the **build** (commit a `.env` on Lovable Cloud). |
+| Stripping only `/functions/v1/alfadocs-auth` before `handleRequest` | Strip **both** `/functions/v1/alfadocs-auth` **and** `/alfadocs-auth` — Supabase often passes the path without `/functions/v1`, so a single-prefix strip 404s every route in production. |
+| `resolveProfile` returning only `{ practiceId, archiveId }` | Also return `userId` at the top level (`return { userId, ... }`) — the lib's `userIdFromProfile` reads it from the return value and throws "Profile does not contain userId" (persisting no user/session) if it's missing. The real `/me` is `{ data: { ..., userId, userEmail } }`. |
+| Reading `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` only (or `AUTH_*` only) | Read both: `AUTH_SUPABASE_URL ?? SUPABASE_URL` and `AUTH_SUPABASE_KEY ?? SUPABASE_SERVICE_ROLE_KEY` — Lovable Cloud injects the bare names, standalone Supabase uses the `AUTH_*` secrets. |
