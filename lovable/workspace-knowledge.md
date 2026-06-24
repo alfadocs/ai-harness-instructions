@@ -1,3 +1,5 @@
+The public AlfaDocs API has a rate limit of 10 requests per second.
+
 # Engineering Standard — AlfaDocs apps
 
 Rules for every AlfaDocs app; task playbooks are in the **Skills** (indexed below). Default to **more files, smaller files, narrower types**. Monoliths require justification.
@@ -116,6 +118,6 @@ Build **all** UI with **`@alfadocs/ui-kit`** (public npm; React 18 & 19). Never 
 
 All names prefixed `alfadocs-`.
 
-**Build** — `connected-app-oauth` (multi-practice OAuth BFF) · `connected-app-api-key` (single-practice) · `design-system` (§12) · `webhooks` (§7, §11) · `oauth-token-refresh` (§6, §11) · `gdpr-consent` · `patient-deep-link` · `typescript-setup` (§3).
+**Build** — `connected-app-oauth` (multi-practice OAuth BFF) · `connected-app-api-key` (single-practice) · `staff-sso-app` · `google-workspace-auth` · `design-system` (§12) · `webhooks` (§7, §11) · `oauth-token-refresh` (§6, §11) · `gdpr-consent` · `patient-deep-link` · `typescript-setup` (§3).
 
 **Review — before shipping** — `sanity-check` (run first) · `code-review` (§1, §2, §9, §10, §13) · `security-review` (§5, §8, §11) · `design-review` (§12) · `logic-review` (§4, §7, §11) · `architecture-review` (§1) · `accessibility-review`.
